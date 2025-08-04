@@ -10,6 +10,7 @@ transformers==4.35.2
 torch==2.1.1
 torchaudio==2.1.1
 datasets==2.14.6
+numpy==1.24.3
 
 # Audio Processing
 pydub==0.25.1
