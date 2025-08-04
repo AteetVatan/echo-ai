@@ -15,42 +15,42 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # API Keys
-    huggingface_api_key: str = Field(..., env="HUGGINGFACE_API_KEY")
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
-    elevenlabs_api_key: str = Field(..., env="ELEVENLABS_API_KEY")
+    HUGGINGFACE_API_KEY: str = Field(..., env="HUGGINGFACE_API_KEY")
+    OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
+    ELEVENLABS_API_KEY: str = Field(..., env="ELEVENLABS_API_KEY")
     
     # Model Configuration
-    default_stt_model: str = Field("openai/whisper-large-v3", env="DEFAULT_STT_MODEL")
-    fallback_stt_model: str = Field("openai/whisper-1", env="FALLBACK_STT_MODEL")
-    default_llm_model: str = Field("mistralai/Mistral-7B-Instruct-v0.2", env="DEFAULT_LLM_MODEL")
-    fallback_llm_model: str = Field("gpt-4o-mini", env="FALLBACK_LLM_MODEL")
-    default_tts_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", env="DEFAULT_TTS_VOICE_ID")
+    DEFAULT_STT_MODEL: str = Field("openai/whisper-large-v3", env="DEFAULT_STT_MODEL")
+    FALLBACK_STT_MODEL: str = Field("openai/whisper-1", env="FALLBACK_STT_MODEL")
+    DEFAULT_LLM_MODEL: str = Field("mistralai/Mistral-7B-Instruct-v0.2", env="DEFAULT_LLM_MODEL")
+    FALLBACK_LLM_MODEL: str = Field("gpt-4o-mini", env="FALLBACK_LLM_MODEL")
+    ELEVENLABS_VOICE_ID: str = Field("21m00Tcm4TlvDq8ikWAM", env="ELEVENLABS_VOICE_ID")
     
     # Latency Configuration
-    stt_chunk_duration: float = Field(2.0, env="STT_CHUNK_DURATION")
-    llm_temperature: float = Field(0.0, env="LLM_TEMPERATURE")
-    tts_streaming: bool = Field(True, env="TTS_STREAMING")
-    cache_tts_responses: bool = Field(True, env="CACHE_TTS_RESPONSES")
+    STT_CHUNK_DURATION: float = Field(2.0, env="STT_CHUNK_DURATION")
+    LLM_TEMPERATURE: float = Field(0.0, env="LLM_TEMPERATURE")
+    TTS_STREAMING: bool = Field(True, env="TTS_STREAMING")
+    TTS_CACHE_ENABLED: bool = Field(True, env="TTS_CACHE_ENABLED")
     
     # Server Configuration
-    host: str = Field("0.0.0.0", env="HOST")
-    port: int = Field(8000, env="PORT")
-    log_level: str = Field("INFO", env="LOG_LEVEL")
-    debug: bool = Field(False, env="DEBUG")
+    HOST: str = Field("0.0.0.0", env="HOST")
+    PORT: int = Field(8000, env="PORT")
+    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    DEBUG: bool = Field(False, env="DEBUG")
     
     # Audio Configuration
-    sample_rate: int = Field(16000, env="SAMPLE_RATE")
-    channels: int = Field(1, env="CHANNELS")
-    audio_format: str = Field("wav", env="AUDIO_FORMAT")
+    SAMPLE_RATE: int = Field(16000, env="SAMPLE_RATE")
+    CHANNELS: int = Field(1, env="CHANNELS")
+    AUDIO_FORMAT: str = Field("wav", env="AUDIO_FORMAT")
     
     # Latency Thresholds (in seconds)
-    stt_timeout: float = Field(5.0, env="STT_TIMEOUT")
-    llm_timeout: float = Field(10.0, env="LLM_TIMEOUT")
-    tts_timeout: float = Field(8.0, env="TTS_TIMEOUT")
+    STT_TIMEOUT: float = Field(5.0, env="STT_TIMEOUT")
+    LLM_TIMEOUT: float = Field(10.0, env="LLM_TIMEOUT")
+    TTS_TIMEOUT: float = Field(8.0, env="TTS_TIMEOUT")
     
     class Config:
         env_file = ".env"
-        case_sensitive = False
+        case_sensitive = True
 
 
 # Global settings instance
@@ -70,9 +70,9 @@ def validate_api_keys() -> bool:
         bool: True if all keys are present, False otherwise
     """
     required_keys = [
-        settings.huggingface_api_key,
-        settings.openai_api_key,
-        settings.elevenlabs_api_key
+        settings.HUGGINGFACE_API_KEY,
+        settings.OPENAI_API_KEY,
+        settings.ELEVENLABS_API_KEY
     ]
     
     return all(key and key != "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
