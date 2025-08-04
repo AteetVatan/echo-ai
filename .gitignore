@@ -1,0 +1,75 @@
+# ------------------------------
+# Python
+# ------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.eggs/
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Byte-compiled and cache
+*.pyc
+*.pyo
+*.pyd
+*.cache
+*.mypy_cache/
+*.pytest_cache/
+*.ipynb_checkpoints
+
+# ------------------------------
+# FastAPI & Uvicorn
+# ------------------------------
+*.log
+*.pid
+*.sqlite3
+instance/
+*.db
+
+# ------------------------------
+# AI Models & Checkpoints
+# ------------------------------
+# Hugging Face cache & models
+hf_cache/
+transformers_cache/
+tokenizers_cache/
+~/.cache/huggingface/
+
+# PyTorch / TensorFlow model checkpoints
+*.ckpt
+*.pt
+*.pth
+*.h5
+
+# Large model folders (if downloaded locally)
+models/
+checkpoints/
+saved_models/
+
+# ------------------------------
+# Environment & Secrets
+# ------------------------------
+.env
+.env.*
+!.env.example  # Keep sample env
+
+# ------------------------------
+# Frontend (if included)
+# ------------------------------
+node_modules/
+dist/
+build/
+frontend/node_modules/
+frontend/dist/
+
+# ------------------------------
+# Docker
