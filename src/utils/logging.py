@@ -1,103 +1,87 @@
 """
-Structured logging configuration for EchoAI voice chat system.
+Logging configuration for EchoAI voice chat system.
 
-This module provides centralized logging setup with timestamps, structured
-error handling, and performance monitoring for the AI pipeline components.
+This module provides structured logging setup, performance monitoring,
+and error handling utilities for the application.
 """
 
 import logging
-import sys
 import time
-from typing import Any, Dict, Optional
-from functools import wraps
+import functools
+from typing import Dict, Any, Optional, Callable
 from src.utils.config import get_settings
+import asyncio
+
+
+settings = get_settings()
 
 
 def setup_logging() -> None:
-    """Configure structured logging with timestamps and formatting."""
-    settings = get_settings()
+    """Setup structured logging for the application."""
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
     
-    # Create formatter with timestamp
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
+    
+    # Create formatter
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, settings.log_level.upper()))
-    
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
+    
+    # Add handler to root logger
     root_logger.addHandler(console_handler)
     
-    # File handler for persistent logs
-    file_handler = logging.FileHandler('echoai.log')
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
+    # Set specific logger levels
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('aiohttp').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Get a logger instance with the specified name.
-    
-    Args:
-        name: Logger name (usually __name__)
-        
-    Returns:
-        logging.Logger: Configured logger instance
-    """
+    """Get a logger instance with the specified name."""
     return logging.getLogger(name)
 
 
-def log_performance(func):
-    """
-    Decorator to log function execution time and performance metrics.
-    
-    Args:
-        func: Function to decorate
-        
-    Returns:
-        Decorated function with performance logging
-    """
-    @wraps(func)
-    async def async_wrapper(*args, **kwargs):
-        logger = get_logger(f"{func.__module__}.{func.__name__}")
-        start_time = time.time()
-        
-        try:
-            result = await func(*args, **kwargs)
-            execution_time = time.time() - start_time
-            logger.info(f"Function {func.__name__} completed in {execution_time:.3f}s")
-            return result
-        except Exception as e:
-            execution_time = time.time() - start_time
-            logger.error(f"Function {func.__name__} failed after {execution_time:.3f}s: {str(e)}")
-            raise
-    
-    @wraps(func)
+def log_performance(func: Callable) -> Callable:
+    """Decorator to log function performance metrics."""
+    @functools.wraps(func)
     def sync_wrapper(*args, **kwargs):
-        logger = get_logger(f"{func.__module__}.{func.__name__}")
         start_time = time.time()
+        logger = get_logger(func.__module__)
         
         try:
             result = func(*args, **kwargs)
-            execution_time = time.time() - start_time
-            logger.info(f"Function {func.__name__} completed in {execution_time:.3f}s")
+            latency = time.time() - start_time
+            logger.info(f"{func.__name__} completed in {latency:.3f}s")
             return result
         except Exception as e:
-            execution_time = time.time() - start_time
-            logger.error(f"Function {func.__name__} failed after {execution_time:.3f}s: {str(e)}")
+            latency = time.time() - start_time
+            logger.error(f"{func.__name__} failed after {latency:.3f}s: {str(e)}")
             raise
     
-    # Return appropriate wrapper based on function type
-    if hasattr(func, '__code__') and func.__code__.co_flags & 0x80:  # CO_COROUTINE
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        start_time = time.time()
+        logger = get_logger(func.__module__)
+        
+        try:
+            result = await func(*args, **kwargs)
+            latency = time.time() - start_time
+            logger.info(f"{func.__name__} completed in {latency:.3f}s")
+            return result
+        except Exception as e:
+            latency = time.time() - start_time
+            logger.error(f"{func.__name__} failed after {latency:.3f}s: {str(e)}")
+            raise
+    
+    if asyncio.iscoroutinefunction(func):
         return async_wrapper
     return sync_wrapper
-
-
-
 
 
 def log_error_with_context(logger: logging.Logger, error: Exception, context: Dict[str, Any] = None) -> None:
