@@ -1,15 +1,18 @@
 """
-Language Model (LLM) service for EchoAI voice chat system.
+Language Model service for EchoAI voice chat system.
 
-This module provides LLM functionality using Mistral 7B (Hugging Face) as the primary
-service with OpenAI GPT-4o-mini as a fallback for reliability and deterministic responses.
+This module provides LLM functionality using Mistral 7B (Hugging Face) as primary
+and GPT-4o-mini (OpenAI) as fallback for generating conversational responses.
 """
 
 import asyncio
 import time
-from typing import Optional, Dict, Any, List
+import json
+from typing import Dict, Any, List, Optional
 import aiohttp
 import openai
+from transformers import pipeline
+
 from src.utils.config import get_settings
 from src.utils.logging import get_logger, log_performance, log_error_with_context
 
@@ -19,294 +22,255 @@ settings = get_settings()
 
 
 class LLMService:
-    """Handles Language Model interactions with fallback mechanisms."""
+    """Language Model service with fallback support."""
     
     def __init__(self):
-        self.hf_api_key = settings.huggingface_api_key
-        self.openai_api_key = settings.openai_api_key
-        self.default_model = settings.default_llm_model
-        self.fallback_model = settings.fallback_llm_model
-        self.temperature = settings.llm_temperature
-        self.timeout = settings.llm_timeout
+        self.hf_api_key = settings.HUGGINGFACE_API_KEY
+        self.openai_api_key = settings.OPENAI_API_KEY
+        self.default_model = settings.DEFAULT_LLM_MODEL
+        self.fallback_model = settings.FALLBACK_LLM_MODEL
+        self.temperature = settings.LLM_TEMPERATURE
+        self.timeout = settings.LLM_TIMEOUT
         
-        # Initialize OpenAI client
-        self.openai_client = openai.AsyncOpenAI(api_key=self.openai_api_key)
+        # Model instances
+        self.hf_pipeline = None
+        self.openai_client = None
+        self.models_warmed_up = False
         
-        # Performance monitoring
-        self.hf_latency = []
-        self.openai_latency = []
-        self.fallback_count = 0
-        
-        # Conversation context
+        # Conversation history
         self.conversation_history: List[Dict[str, str]] = []
         self.max_history_length = 10
         
-        # Model warm-up flag
-        self._models_warmed_up = False
+        # Performance tracking
+        self.performance_stats = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "avg_latency": 0.0,
+            "latencies": []
+        }
     
     async def warm_up_models(self) -> None:
-        """Pre-load models to reduce latency on first use."""
-        if self._models_warmed_up:
-            return
-        
+        """Warm up LLM models for optimal performance."""
         try:
             logger.info("Warming up LLM models...")
             
             # Warm up Hugging Face model
-            if "huggingface" in self.default_model.lower():
-                await self._warm_up_hf_model()
+            if self.hf_api_key:
+                try:
+                    self.hf_pipeline = pipeline(
+                        "text-generation",
+                        model=self.default_model,
+                        token=self.hf_api_key,
+                        device_map="auto"
+                    )
+                    logger.info(f"Hugging Face model {self.default_model} loaded")
+                except Exception as e:
+                    logger.warning(f"Failed to load Hugging Face model: {str(e)}")
             
-            # Warm up OpenAI model
-            await self._warm_up_openai_model()
+            # Warm up OpenAI client
+            if self.openai_api_key:
+                try:
+                    self.openai_client = openai.AsyncOpenAI(api_key=self.openai_api_key)
+                    logger.info("OpenAI client initialized")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize OpenAI client: {str(e)}")
             
-            self._models_warmed_up = True
+            self.models_warmed_up = True
             logger.info("LLM models warmed up successfully")
             
         except Exception as e:
-            logger.warning(f"Failed to warm up models: {str(e)}")
-    
-    async def _warm_up_hf_model(self) -> None:
-        """Warm up Hugging Face Mistral model."""
-        try:
-            test_prompt = "Hello, how are you?"
-            result = await self._generate_with_hf(test_prompt)
-            logger.debug(f"HF model warm-up test result: {result[:50]}...")
-            
-        except Exception as e:
-            logger.warning(f"Failed to warm up HF model: {str(e)}")
-    
-    async def _warm_up_openai_model(self) -> None:
-        """Warm up OpenAI GPT model."""
-        try:
-            test_prompt = "Hello, how are you?"
-            result = await self._generate_with_openai(test_prompt)
-            logger.debug(f"OpenAI model warm-up test result: {result[:50]}...")
-            
-        except Exception as e:
-            logger.warning(f"Failed to warm up OpenAI model: {str(e)}")
+            logger.error(f"Failed to warm up LLM models: {str(e)}")
     
     def add_to_conversation(self, role: str, content: str) -> None:
-        """
-        Add message to conversation history.
-        
-        Args:
-            role: 'user' or 'assistant'
-            content: Message content
-        """
+        """Add message to conversation history."""
         self.conversation_history.append({"role": role, "content": content})
         
-        # Keep only recent history
-        if len(self.conversation_history) > self.max_history_length * 2:
-            self.conversation_history = self.conversation_history[-self.max_history_length * 2:]
+        # Keep only recent messages
+        if len(self.conversation_history) > self.max_history_length:
+            self.conversation_history = self.conversation_history[-self.max_history_length:]
     
     def get_conversation_context(self) -> str:
-        """
-        Get formatted conversation context for LLM.
-        
-        Returns:
-            str: Formatted conversation history
-        """
+        """Get conversation context as formatted string."""
         if not self.conversation_history:
             return ""
         
         context_parts = []
-        for msg in self.conversation_history[-self.max_history_length:]:
-            role = "User" if msg["role"] == "user" else "Assistant"
-            context_parts.append(f"{role}: {msg['content']}")
+        for message in self.conversation_history:
+            role = message["role"]
+            content = message["content"]
+            if role == "user":
+                context_parts.append(f"User: {content}")
+            elif role == "assistant":
+                context_parts.append(f"Assistant: {content}")
         
         return "\n".join(context_parts)
     
     @log_performance
     async def generate_response(self, user_input: str, use_fallback: bool = False) -> Dict[str, Any]:
         """
-        Generate LLM response with fallback logic.
+        Generate response using primary or fallback LLM service.
         
         Args:
-            user_input: User's input text
-            use_fallback: Force use of fallback model
+            user_input: User input text
+            use_fallback: Whether to use fallback service
             
         Returns:
-            Dict containing response and metadata
-        """
-        try:
-            # Add user input to conversation
-            self.add_to_conversation("user", user_input)
-            
-            # Choose model based on fallback flag
-            if use_fallback or "openai" in self.default_model.lower():
-                return await self._generate_with_openai(user_input)
-            else:
-                return await self._generate_with_hf(user_input)
-                
-        except Exception as e:
-            logger.error(f"Primary LLM failed, trying fallback: {str(e)}")
-            return await self._generate_with_openai(user_input)
-    
-    async def _generate_with_hf(self, user_input: str) -> Dict[str, Any]:
-        """
-        Generate response using Hugging Face Mistral.
-        
-        Args:
-            user_input: User's input text
-            
-        Returns:
-            Dict with response and metadata
+            Dict with response result
         """
         start_time = time.time()
         
         try:
-            # Prepare conversation context
-            context = self.get_conversation_context()
+            self.performance_stats["total_requests"] += 1
             
-            # Create prompt with context
+            # Try primary service first (unless fallback is explicitly requested)
+            if not use_fallback and self.hf_pipeline:
+                try:
+                    result = await self._generate_with_hf(user_input)
+                    self._update_stats(result["latency"], True)
+                    return result
+                except Exception as e:
+                    logger.warning(f"Primary LLM failed, trying fallback: {str(e)}")
+            
+            # Use fallback service
+            if self.openai_client:
+                try:
+                    result = await self._generate_with_openai(user_input)
+                    self._update_stats(result["latency"], True)
+                    return result
+                except Exception as e:
+                    logger.error(f"Fallback LLM also failed: {str(e)}")
+                    self._update_stats(time.time() - start_time, False)
+                    return {"error": f"LLM failed: {str(e)}"}
+            else:
+                error_msg = "No LLM services available"
+                self._update_stats(time.time() - start_time, False)
+                return {"error": error_msg}
+                
+        except Exception as e:
+            latency = time.time() - start_time
+            self._update_stats(latency, False)
+            log_error_with_context(logger, e, {"method": "generate_response", "input_length": len(user_input)})
+            return {"error": f"Response generation failed: {str(e)}"}
+    
+    async def _generate_with_hf(self, user_input: str) -> Dict[str, Any]:
+        """Generate response using Hugging Face model."""
+        start_time = time.time()
+        
+        try:
+            if not self.hf_pipeline:
+                raise Exception("Hugging Face model not loaded")
+            
+            # Build prompt with conversation context
+            context = self.get_conversation_context()
             if context:
                 prompt = f"{context}\nUser: {user_input}\nAssistant:"
             else:
                 prompt = f"User: {user_input}\nAssistant:"
             
-            # Use Hugging Face Inference API
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    "Authorization": f"Bearer {self.hf_api_key}",
-                    "Content-Type": "application/json"
-                }
-                
-                payload = {
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_new_tokens": 150,
-                        "temperature": self.temperature,
-                        "do_sample": self.temperature > 0,
-                        "return_full_text": False
-                    }
-                }
-                
-                async with session.post(
-                    f"https://api-inference.huggingface.co/models/{self.default_model}",
-                    headers=headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
-                ) as response:
-                    
-                    if response.status == 200:
-                        result = await response.json()
-                        latency = time.time() - start_time
-                        self.hf_latency.append(latency)
-                        
-                        # Extract generated text
-                        if isinstance(result, list) and len(result) > 0:
-                            generated_text = result[0].get("generated_text", "")
-                        else:
-                            generated_text = result.get("generated_text", "")
-                        
-                        # Clean up response
-                        response_text = self._clean_response(generated_text, prompt)
-                        
-                        # Add to conversation
-                        self.add_to_conversation("assistant", response_text)
-                        
-                        logger.info(f"HF LLM completed in {latency:.3f}s: '{response_text[:50]}...'")
-                        
-                        return {
-                            "text": response_text,
-                            "model": self.default_model,
-                            "latency": latency,
-                            "tokens_used": len(prompt.split()) + len(response_text.split())
-                        }
-                    else:
-                        raise Exception(f"HF API error: {response.status}")
-                        
+            # Generate response
+            response = self.hf_pipeline(
+                prompt,
+                max_length=512,
+                temperature=self.temperature,
+                do_sample=True,
+                pad_token_id=self.hf_pipeline.tokenizer.eos_token_id
+            )
+            
+            # Extract generated text
+            generated_text = response[0]["generated_text"]
+            
+            # Extract only the assistant's response
+            if "Assistant:" in generated_text:
+                assistant_response = generated_text.split("Assistant:")[-1].strip()
+            else:
+                assistant_response = generated_text.split(prompt)[-1].strip()
+            
+            # Clean response
+            cleaned_response = self._clean_response(assistant_response)
+            
+            latency = time.time() - start_time
+            
+            logger.debug(f"HF generation completed in {latency:.3f}s")
+            
+            return {
+                "text": cleaned_response,
+                "model": "huggingface_mistral",
+                "latency": latency,
+                "tokens_used": len(response[0]["generated_text"].split())
+            }
+            
         except Exception as e:
             latency = time.time() - start_time
-            log_error_with_context(logger, e, {"model": self.default_model, "latency": latency})
+            log_error_with_context(logger, e, {"method": "_generate_with_hf", "latency": latency})
             raise
     
     async def _generate_with_openai(self, user_input: str) -> Dict[str, Any]:
-        """
-        Generate response using OpenAI GPT.
-        
-        Args:
-            user_input: User's input text
-            
-        Returns:
-            Dict with response and metadata
-        """
+        """Generate response using OpenAI model."""
         start_time = time.time()
         
         try:
-            # Prepare conversation messages
+            if not self.openai_client:
+                raise Exception("OpenAI client not initialized")
+            
+            # Build messages with conversation history
             messages = []
             
-            # Add system message
-            messages.append({
-                "role": "system",
-                "content": "You are a helpful AI assistant. Provide concise, natural responses suitable for voice conversation."
-            })
-            
             # Add conversation history
-            for msg in self.conversation_history[-self.max_history_length:]:
+            for msg in self.conversation_history:
                 messages.append({
                     "role": msg["role"],
                     "content": msg["content"]
                 })
             
-            # Call OpenAI API
+            # Add current user input
+            messages.append({
+                "role": "user",
+                "content": user_input
+            })
+            
+            # Generate response
             response = await self.openai_client.chat.completions.create(
                 model=self.fallback_model,
                 messages=messages,
-                max_tokens=150,
                 temperature=self.temperature,
-                stream=False
+                max_tokens=500
             )
             
+            assistant_response = response.choices[0].message.content.strip()
+            cleaned_response = self._clean_response(assistant_response)
+            
             latency = time.time() - start_time
-            self.openai_latency.append(latency)
-            self.fallback_count += 1
             
-            response_text = response.choices[0].message.content.strip()
-            
-            # Add to conversation
-            self.add_to_conversation("assistant", response_text)
-            
-            logger.info(f"OpenAI LLM completed in {latency:.3f}s: '{response_text[:50]}...'")
+            logger.debug(f"OpenAI generation completed in {latency:.3f}s")
             
             return {
-                "text": response_text,
-                "model": self.fallback_model,
+                "text": cleaned_response,
+                "model": "openai_gpt4o_mini",
                 "latency": latency,
-                "tokens_used": response.usage.total_tokens if response.usage else 0,
-                "fallback_used": True
+                "tokens_used": response.usage.total_tokens
             }
             
         except Exception as e:
             latency = time.time() - start_time
-            log_error_with_context(logger, e, {"model": self.fallback_model, "latency": latency})
+            log_error_with_context(logger, e, {"method": "_generate_with_openai", "latency": latency})
             raise
     
-    def _clean_response(self, generated_text: str, prompt: str) -> str:
-        """
-        Clean up generated response text.
+    def _clean_response(self, response: str) -> str:
+        """Clean and format LLM response."""
+        # Remove extra whitespace
+        response = response.strip()
         
-        Args:
-            generated_text: Raw generated text
-            prompt: Original prompt
-            
-        Returns:
-            str: Cleaned response text
-        """
-        # Remove the prompt from the response
-        if prompt in generated_text:
-            response = generated_text.replace(prompt, "").strip()
-        else:
-            response = generated_text.strip()
+        # Remove any remaining prompt artifacts
+        if response.startswith("User:"):
+            response = response.split("User:", 1)[0].strip()
         
-        # Remove any remaining "Assistant:" prefixes
         if response.startswith("Assistant:"):
-            response = response[10:].strip()
+            response = response.split("Assistant:", 1)[1].strip()
         
         # Limit response length
-        if len(response) > 500:
-            response = response[:500] + "..."
+        if len(response) > 1000:
+            response = response[:1000] + "..."
         
         return response
     
@@ -315,21 +279,36 @@ class LLMService:
         self.conversation_history.clear()
         logger.info("Conversation history cleared")
     
-    def get_performance_stats(self) -> Dict[str, Any]:
-        """
-        Get performance statistics for monitoring.
+    def _update_stats(self, latency: float, success: bool) -> None:
+        """Update performance statistics."""
+        self.performance_stats["latencies"].append(latency)
         
-        Returns:
-            Dict with performance metrics
-        """
+        if success:
+            self.performance_stats["successful_requests"] += 1
+        else:
+            self.performance_stats["failed_requests"] += 1
+        
+        # Keep only last 100 latencies
+        if len(self.performance_stats["latencies"]) > 100:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        
+        # Update average latency
+        if self.performance_stats["latencies"]:
+            self.performance_stats["avg_latency"] = sum(self.performance_stats["latencies"]) / len(self.performance_stats["latencies"])
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics."""
         return {
-            "hf_average_latency": sum(self.hf_latency) / len(self.hf_latency) if self.hf_latency else 0,
-            "openai_average_latency": sum(self.openai_latency) / len(self.openai_latency) if self.openai_latency else 0,
-            "fallback_count": self.fallback_count,
-            "total_generations": len(self.hf_latency) + len(self.openai_latency),
+            "total_requests": self.performance_stats["total_requests"],
+            "successful_requests": self.performance_stats["successful_requests"],
+            "failed_requests": self.performance_stats["failed_requests"],
+            "avg_latency": self.performance_stats["avg_latency"],
+            "models_warmed_up": self.models_warmed_up,
+            "primary_model": "huggingface_mistral" if self.hf_pipeline else "none",
+            "fallback_model": "openai_gpt4o_mini" if self.openai_client else "none",
             "conversation_length": len(self.conversation_history)
         }
 
 
-# Global LLM service instance
+# Global service instance
 llm_service = LLMService() 
