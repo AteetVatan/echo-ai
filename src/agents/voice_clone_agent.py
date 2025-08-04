@@ -12,7 +12,7 @@ from agno import Agent, Tool
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
-from src.utils.audio_utils import audio_processor
+from src.utils.audio import audio_processor
 from src.utils import get_logger, log_performance, PerformanceMonitor
 
 

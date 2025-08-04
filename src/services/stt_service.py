@@ -14,7 +14,7 @@ import openai
 from transformers import pipeline
 from src.utils.config import get_settings
 from src.utils.logging import get_logger, log_performance, log_error_with_context
-from src.utils.audio_utils import audio_processor
+from src.utils.audio import audio_processor
 
 
 logger = get_logger(__name__)
