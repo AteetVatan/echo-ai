@@ -28,6 +28,7 @@ class TTSService:
     def __init__(self):
         self.api_key = settings.ELEVENLABS_API_KEY
         self.voice_id = settings.ELEVENLABS_VOICE_ID
+        self.model_id = settings.ELEVENLABS_MODEL_ID
         self.base_url = settings.ELEVENLABS_API_BASE
         
         self.db = DBOperations()
@@ -185,7 +186,7 @@ class TTSService:
             
             data = {
                 "text": text,
-                "model_id": "eleven_monolingual_v1",
+                "model_id": self.model_id,
                 "voice_settings": {
                     "stability": 0.5,
                     "similarity_boost": 0.5
@@ -231,9 +232,9 @@ class TTSService:
             
             data = {
                 "text": text,
-                "model_id": "eleven_monolingual_v1",
+                "model_id": self.model_id,
                 "voice_settings": {
-                    "stability": 0.5,
+                    "stability": 0.5, 
                     "similarity_boost": 0.5
                 }
             }
