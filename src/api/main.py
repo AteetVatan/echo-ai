@@ -16,9 +16,11 @@ from fastapi.responses import HTMLResponse
 import uvicorn
 
 from src.agents.voice_clone_agent import voice_clone_agent
-from src.utils.config import get_settings, validate_api_keys
-from src.utils.logging import setup_logging, get_logger
+from src.services.tts_service import tts_service
+from src.utils import get_settings, validate_api_keys
+from src.utils import setup_logging, get_logger
 from src.utils.audio import stream_processor
+from src.api.connection_manager import ConnectionManager
 
 
 # Setup logging
@@ -41,77 +43,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-class ConnectionManager:
-    """Manages WebSocket connections and sessions."""
-    
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-        self.session_data: Dict[str, Dict[str, Any]] = {}
-        # Add audio buffers for streaming
-        self.audio_buffers: Dict[str, List[bytes]] = {}
-        self.streaming_sessions: Dict[str, bool] = {}
-    
-    async def connect(self, websocket: WebSocket, session_id: str):
-        """Connect a new WebSocket client."""
-        await websocket.accept()
-        self.active_connections[session_id] = websocket
-        self.session_data[session_id] = {
-            "connected_at": asyncio.get_event_loop().time(),
-            "message_count": 0,
-            "last_activity": asyncio.get_event_loop().time()
-        }
-        # Initialize audio buffer for streaming
-        self.audio_buffers[session_id] = []
-        self.streaming_sessions[session_id] = False
-        logger.info(f"WebSocket connected: {session_id}")
-    
-    def disconnect(self, session_id: str):
-        """Disconnect a WebSocket client."""
-        if session_id in self.active_connections:
-            del self.active_connections[session_id]
-        if session_id in self.session_data:
-            del self.session_data[session_id]
-        # Clean up audio buffers
-        if session_id in self.audio_buffers:
-            del self.audio_buffers[session_id]
-        if session_id in self.streaming_sessions:
-            del self.streaming_sessions[session_id]
-        logger.info(f"WebSocket disconnected: {session_id}")
-    
-    async def send_message(self, session_id: str, message: Dict[str, Any]):
-        """Send message to specific client."""
-        if session_id in self.active_connections:
-            try:
-                await self.active_connections[session_id].send_text(json.dumps(message))
-                self.session_data[session_id]["message_count"] += 1
-                self.session_data[session_id]["last_activity"] = asyncio.get_event_loop().time()
-            except Exception as e:
-                logger.error(f"Failed to send message to {session_id}: {str(e)}")
-                self.disconnect(session_id)
-    
-    def get_active_sessions(self) -> Dict[str, Dict[str, Any]]:
-        """Get information about active sessions."""
-        return self.session_data
-    
-    def add_audio_chunk(self, session_id: str, audio_chunk: bytes):
-        """Add audio chunk to session buffer."""
-        if session_id in self.audio_buffers:
-            self.audio_buffers[session_id].append(audio_chunk)
-    
-    def get_audio_buffer(self, session_id: str) -> List[bytes]:
-        """Get audio buffer for session."""
-        return self.audio_buffers.get(session_id, [])
-    
-    def clear_audio_buffer(self, session_id: str):
-        """Clear audio buffer for session."""
-        if session_id in self.audio_buffers:
-            self.audio_buffers[session_id].clear()
-    
-    def set_streaming_status(self, session_id: str, is_streaming: bool):
-        """Set streaming status for session."""
-        self.streaming_sessions[session_id] = is_streaming
 
 
 # Global connection manager
@@ -142,9 +73,16 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down EchoAI Voice Chat API...")
-    # Close all WebSocket connections
+    logger.info("Closing all WebSocket connections...")
     for session_id in list(manager.active_connections.keys()):
         manager.disconnect(session_id)
+    
+    # Cleanup services
+    try:
+        tts_service.cleanup()
+        logger.info("Services cleanup completed")
+    except Exception as e:
+        logger.error(f"Failed to cleanup services: {str(e)}")
 
 
 @app.get("/")
@@ -218,6 +156,8 @@ async def clear_conversation():
 @app.websocket("/ws/voice")
 async def websocket_voice_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time voice chat with streaming support."""
+    
+    #unique session ID for each client.
     session_id = str(uuid.uuid4())
     
     try:
@@ -233,7 +173,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
         
         logger.info(f"Voice chat session started: {session_id}")
         
-        while True:
+        while True: # WebSocket connections are open indefinitely.
             try:
                 # Receive message from client
                 data = await websocket.receive_text()
@@ -242,16 +182,21 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 
                 if message_type == "audio":
+                    #Full audio file is sent in one message.
                     await handle_audio_message(session_id, message)
                 elif message_type == "audio_chunk":
+                    #Streaming audio chunks
                     await handle_audio_chunk_message(session_id, message)
                 elif message_type == "start_streaming":
+                    # real-time audio stream.
                     await handle_start_streaming(session_id, message)
                 elif message_type == "stop_streaming":
+                    # real-time audio stream.
                     await handle_stop_streaming(session_id, message)
                 elif message_type == "text":
                     await handle_text_message(session_id, message)
                 elif message_type == "ping":
+                    #Health check 
                     await manager.send_message(session_id, {"type": "pong"})
                 else:
                     await manager.send_message(session_id, {
