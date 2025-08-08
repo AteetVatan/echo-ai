@@ -1,7 +1,7 @@
 """
 Language Model service for EchoAI voice chat system.
 
-This module provides LLM functionality using Mistral 7B (Hugging Face) as primary
+This module provides LLM functionality using Mistral AI API as primary
 and GPT-4o-mini (OpenAI) as fallback for generating conversational responses.
 """
 
@@ -11,10 +11,11 @@ import json
 from typing import Dict, Any, List, Optional
 import aiohttp
 import openai
-from transformers import pipeline
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
 
-from src.utils.config import get_settings
-from src.utils.logging import get_logger, log_performance, log_error_with_context
+from src.utils import get_settings
+from src.utils import get_logger, log_performance, log_error_with_context
 
 
 logger = get_logger(__name__)
@@ -25,15 +26,16 @@ class LLMService:
     """Language Model service with fallback support."""
     
     def __init__(self):
-        self.hf_api_key = settings.HUGGINGFACE_API_KEY
+        self.mistral_api_key = settings.MISTRAL_API_KEY
+        self.mistral_api_base = settings.MISTRAL_API_BASE
+        self.mistral_model = settings.MISTRAL_MODEL
         self.openai_api_key = settings.OPENAI_API_KEY
-        self.default_model = settings.DEFAULT_LLM_MODEL
-        self.fallback_model = settings.FALLBACK_LLM_MODEL
+        self.openai_model = settings.OPENAI_MODEL
         self.temperature = settings.LLM_TEMPERATURE
         self.timeout = settings.LLM_TIMEOUT
         
         # Model instances
-        self.hf_pipeline = None
+        self.mistral_client = None
         self.openai_client = None
         self.models_warmed_up = False
         
@@ -55,18 +57,16 @@ class LLMService:
         try:
             logger.info("Warming up LLM models...")
             
-            # Warm up Hugging Face model
-            if self.hf_api_key:
+            # Warm up Mistral client
+            if self.mistral_api_key:
                 try:
-                    self.hf_pipeline = pipeline(
-                        "text-generation",
-                        model=self.default_model,
-                        token=self.hf_api_key,
-                        device_map="auto"
+                    self.mistral_client = MistralClient(
+                        api_key=self.mistral_api_key,
+                        endpoint=self.mistral_api_base
                     )
-                    logger.info(f"Hugging Face model {self.default_model} loaded")
+                    logger.info(f"Mistral client initialized with model {self.mistral_model}")
                 except Exception as e:
-                    logger.warning(f"Failed to load Hugging Face model: {str(e)}")
+                    logger.warning(f"Failed to initialize Mistral client: {str(e)}")
             
             # Warm up OpenAI client
             if self.openai_api_key:
@@ -124,9 +124,9 @@ class LLMService:
             self.performance_stats["total_requests"] += 1
             
             # Try primary service first (unless fallback is explicitly requested)
-            if not use_fallback and self.hf_pipeline:
+            if not use_fallback and self.mistral_client:
                 try:
-                    result = await self._generate_with_hf(user_input)
+                    result = await self._generate_with_mistral(user_input)
                     self._update_stats(result["latency"], True)
                     return result
                 except Exception as e:
@@ -153,56 +153,55 @@ class LLMService:
             log_error_with_context(logger, e, {"method": "generate_response", "input_length": len(user_input)})
             return {"error": f"Response generation failed: {str(e)}"}
     
-    async def _generate_with_hf(self, user_input: str) -> Dict[str, Any]:
-        """Generate response using Hugging Face model."""
+    async def _generate_with_mistral(self, user_input: str) -> Dict[str, Any]:
+        """Generate response using Mistral AI API."""
         start_time = time.time()
         
         try:
-            if not self.hf_pipeline:
-                raise Exception("Hugging Face model not loaded")
+            if not self.mistral_client:
+                raise Exception("Mistral client not initialized")
             
-            # Build prompt with conversation context
-            context = self.get_conversation_context()
-            if context:
-                prompt = f"{context}\nUser: {user_input}\nAssistant:"
-            else:
-                prompt = f"User: {user_input}\nAssistant:"
+            # Build messages with conversation history
+            messages = []
+            
+            # Add conversation history
+            for msg in self.conversation_history:
+                messages.append(ChatMessage(
+                    role=msg["role"],
+                    content=msg["content"]
+                ))
+            
+            # Add current user input
+            messages.append(ChatMessage(
+                role="user",
+                content=user_input
+            ))
             
             # Generate response
-            response = self.hf_pipeline(
-                prompt,
-                max_length=512,
+            response = await self.mistral_client.chat(
+                model=self.mistral_model,
+                messages=messages,
                 temperature=self.temperature,
-                do_sample=True,
-                pad_token_id=self.hf_pipeline.tokenizer.eos_token_id
+                #max_tokens=500
             )
             
-            # Extract generated text
-            generated_text = response[0]["generated_text"]
-            
-            # Extract only the assistant's response
-            if "Assistant:" in generated_text:
-                assistant_response = generated_text.split("Assistant:")[-1].strip()
-            else:
-                assistant_response = generated_text.split(prompt)[-1].strip()
-            
-            # Clean response
+            assistant_response = response.choices[0].message.content.strip()
             cleaned_response = self._clean_response(assistant_response)
             
             latency = time.time() - start_time
             
-            logger.debug(f"HF generation completed in {latency:.3f}s")
+            logger.debug(f"Mistral generation completed in {latency:.3f}s")
             
             return {
                 "text": cleaned_response,
-                "model": "huggingface_mistral",
+                "model": "mistral_ai",
                 "latency": latency,
-                "tokens_used": len(response[0]["generated_text"].split())
+                "tokens_used": response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 0
             }
             
         except Exception as e:
             latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_generate_with_hf", "latency": latency})
+            log_error_with_context(logger, e, {"method": "_generate_with_mistral", "latency": latency})
             raise
     
     async def _generate_with_openai(self, user_input: str) -> Dict[str, Any]:
@@ -231,10 +230,10 @@ class LLMService:
             
             # Generate response
             response = await self.openai_client.chat.completions.create(
-                model=self.fallback_model,
+                model=self.openai_model,
                 messages=messages,
                 temperature=self.temperature,
-                max_tokens=500
+                #max_tokens=500
             )
             
             assistant_response = response.choices[0].message.content.strip()
@@ -304,7 +303,7 @@ class LLMService:
             "failed_requests": self.performance_stats["failed_requests"],
             "avg_latency": self.performance_stats["avg_latency"],
             "models_warmed_up": self.models_warmed_up,
-            "primary_model": "huggingface_mistral" if self.hf_pipeline else "none",
+            "primary_model": "mistral_ai" if self.mistral_client else "none",
             "fallback_model": "openai_gpt4o_mini" if self.openai_client else "none",
             "conversation_length": len(self.conversation_history)
         }
