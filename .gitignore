@@ -72,4 +72,15 @@ frontend/node_modules/
 frontend/dist/
 
 # ------------------------------
+# Audio Cache & Database
+# ------------------------------
+audio_cache/
+src/db/audio_cache.db
+*.mp3
+*.wav
+*.webm
+*.json
+
+# ------------------------------
 # Docker
+debug_audio_input.raw
