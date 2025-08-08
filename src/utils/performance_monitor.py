@@ -1,5 +1,5 @@
 from typing import Dict, Optional
-from src.utils.logging import get_logger
+from src.utils import get_logger
 
 
 class PerformanceMonitor:

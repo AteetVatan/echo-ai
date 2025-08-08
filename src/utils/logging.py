@@ -9,7 +9,7 @@ import logging
 import time
 import functools
 from typing import Dict, Any, Optional, Callable
-from src.utils.config import get_settings
+from src.utils import get_settings
 import asyncio
 
 
