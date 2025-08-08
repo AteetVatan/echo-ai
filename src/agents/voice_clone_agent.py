@@ -8,14 +8,14 @@ for real-time voice chat with streaming audio support.
 import asyncio
 import time
 from typing import Dict, Any, List, Optional
-import agno
-from agno import Agent, Tool
+from agno.agent import Agent
+from agno.tools import tool
 
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
 from src.utils.audio import audio_processor, stream_processor
-from src.utils.logging import get_logger, log_performance, log_error_with_context
+from src.utils import get_logger, log_performance, log_error_with_context
 
 
 logger = get_logger(__name__)
@@ -25,7 +25,17 @@ class VoiceCloneAgent(Agent):
     """Main agent for orchestrating voice chat pipeline with streaming support."""
     
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            tools=[
+                self.stt_tool,
+                self.llm_tool,
+                self.tts_tool,
+                self.process_audio_tool,
+                self.generate_response_tool,
+                self.synthesize_speech_tool,
+                self.process_streaming_audio_tool,
+            ]
+        )
         self.conversation_active = False
         self.current_session_id = None
         self.performance_monitor = {
@@ -33,16 +43,9 @@ class VoiceCloneAgent(Agent):
             "session_stats": {}
         }
         
-        # Register tools
-        self.register_tool(self.stt_tool)
-        self.register_tool(self.llm_tool)
-        self.register_tool(self.tts_tool)
-        self.register_tool(self.process_audio_tool)
-        self.register_tool(self.generate_response_tool)
-        self.register_tool(self.synthesize_speech_tool)
-        self.register_tool(self.process_streaming_audio_tool)
+
     
-    @Tool("Transcribe audio using STT service")
+    @tool("Transcribe audio using STT service")
     async def stt_tool(self, audio_data: bytes, use_fallback: bool = False) -> Dict[str, Any]:
         """
         Transcribe audio to text using STT service.
@@ -61,7 +64,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "stt_tool", "audio_size": len(audio_data)})
             return {"error": f"STT failed: {str(e)}"}
     
-    @Tool("Generate LLM response")
+    @tool("Generate LLM response")
     async def llm_tool(self, user_input: str, use_fallback: bool = False) -> Dict[str, Any]:
         """
         Generate response using LLM service.
@@ -80,7 +83,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "llm_tool", "input_length": len(user_input)})
             return {"error": f"LLM failed: {str(e)}"}
     
-    @Tool("Synthesize speech using TTS service")
+    @tool("Synthesize speech using TTS service")
     async def tts_tool(self, text: str, use_streaming: bool = True) -> Dict[str, Any]:
         """
         Synthesize speech using TTS service.
@@ -99,7 +102,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "tts_tool", "text_length": len(text)})
             return {"error": f"TTS failed: {str(e)}"}
     
-    @Tool("Process audio for STT compatibility")
+    @tool("Process audio for STT compatibility")
     async def process_audio_tool(self, audio_data: bytes, format: str = "webm") -> bytes:
         """
         Process audio data for STT compatibility.
@@ -118,7 +121,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "process_audio_tool", "format": format})
             raise
     
-    @Tool("Process streaming audio chunks")
+    @tool("Process streaming audio chunks")
     async def process_streaming_audio_tool(self, audio_chunks: List[bytes]) -> List[bytes]:
         """
         Process streaming audio chunks for optimal STT performance.
@@ -143,7 +146,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "process_streaming_audio_tool", "chunks_count": len(audio_chunks)})
             raise
     
-    @Tool("Generate complete response pipeline")
+    @tool("Generate complete response pipeline")
     async def generate_response_tool(self, user_input: str) -> Dict[str, Any]:
         """
         Generate complete response for text input.
@@ -186,7 +189,7 @@ class VoiceCloneAgent(Agent):
             log_error_with_context(logger, e, {"tool": "generate_response_tool", "input": user_input})
             return {"error": f"Response generation failed: {str(e)}"}
     
-    @Tool("Synthesize complete speech response")
+    @tool("Synthesize complete speech response")
     async def synthesize_speech_tool(self, text: str) -> Dict[str, Any]:
         """
         Synthesize complete speech response.
@@ -426,13 +429,15 @@ class VoiceCloneAgent(Agent):
         """Warm up all services for optimal performance."""
         try:
             logger.info("Warming up all services...")
-            
-            # Warm up services in parallel
+
+            # Warm up async services in parallel
             await asyncio.gather(
                 stt_service.warm_up_models(),
-                llm_service.warm_up_models(),
-                tts_service.warm_up_cache()
+                llm_service.warm_up_models()
             )
+            
+            # Warm up TTS cache synchronously
+            await tts_service.warm_up_cache()
             
             logger.info("All services warmed up successfully")
             
