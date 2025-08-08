@@ -6,16 +6,22 @@ websockets==12.0
 # AI/ML Libraries
 agno==0.1.0
 openai==1.3.7
-transformers==4.35.2
-torch==2.1.1
-torchaudio==2.1.1
+mistralai==0.1.2
+transformers>=4.52.2
+torch==2.4.1
+torchaudio==2.4.1
 datasets==2.14.6
-numpy==1.24.3
+numpy==1.26.4
 
 # Audio Processing
-pydub==0.25.1
-librosa==0.10.1
+#librosa==0.10.1
 soundfile==0.12.1
+#moviepy>=2.2.1
+imageio-ffmpeg==0.5.1
+# use a recent version with wheels-friendly deps
+faster-whisper==1.0.3
+# (optional but helpful if resolver fights you)
+av>=12,<14
 
 # HTTP/Async
 aiohttp==3.9.1
@@ -23,7 +29,7 @@ httpx==0.25.2
 
 # Configuration & Utilities
 python-dotenv==1.0.0
-pydantic==2.5.0
+pydantic==2.5.2
 pydantic-settings==2.1.0
 
 # Testing
@@ -37,4 +43,8 @@ flake8==6.1.0
 mypy==1.7.1
 
 # Deployment
-gunicorn==21.2.0 
+gunicorn==21.2.0
+
+# Database and ORM
+#supabase==2.17.0
+asyncpg>=0.30.0
