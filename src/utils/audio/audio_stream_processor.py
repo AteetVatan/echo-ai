@@ -1,7 +1,6 @@
 import asyncio
-from typing import Generator
-from src.utils.logging import get_logger
-from src.utils.config import get_settings
+from typing import Generator, AsyncGenerator
+from src.utils import get_logger, get_settings
 
 
 
@@ -13,7 +12,7 @@ class AudioStreamProcessor:
         self.settings = get_settings()
         self.chunk_size = chunk_size
     
-    async def process_audio_stream(self, audio_stream: asyncio.StreamReader) -> Generator[bytes, None, None]:
+    async def process_audio_stream(self, audio_stream: asyncio.StreamReader) -> AsyncGenerator[bytes, None]:
         """
         Process incoming audio stream in real-time.
         
