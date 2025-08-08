@@ -4,16 +4,21 @@ Speech-to-Text service for EchoAI voice chat system.
 This module provides STT functionality using Hugging Face Whisper as primary
 and OpenAI Whisper as fallback, with streaming audio support.
 """
-
+import os
+import io
 import asyncio
 import time
 from typing import Dict, Any, List, Optional
 import aiohttp
 import openai
-from transformers import pipeline
-
-from src.utils.config import get_settings
-from src.utils.logging import get_logger, log_performance, log_error_with_context
+from faster_whisper import WhisperModel
+import wave
+from imageio_ffmpeg import get_ffmpeg_exe
+import soundfile as sf
+import torch
+import numpy as np
+from src.utils import get_settings
+from src.utils import get_logger, log_performance, log_error_with_context
 from src.utils.audio import audio_processor, stream_processor
 
 
@@ -35,24 +40,49 @@ class STTService:
             "avg_latency": 0.0,
             "latencies": []
         }
+        
+        #to ensure any library (like Hugging Face) that calls ffmpeg without a full path will still find it.
+        # Ensure ffmpeg is discoverable by libs expecting it on PATH
+        try:
+            ffmpeg_path = get_ffmpeg_exe()
+            ffmpeg_dir = os.path.dirname(ffmpeg_path)
+            path_parts = os.environ.get("PATH", "").split(os.pathsep)
+            if ffmpeg_dir not in path_parts:
+                os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+            logger.info(f"FFmpeg available at: {ffmpeg_path}")
+        except Exception as e:
+            logger.warning(f"Could not initialize ffmpeg from imageio-ffmpeg: {e}")
+        
+        
     
     async def warm_up_models(self) -> None:
         """Warm up STT models for optimal performance."""
         try:
             logger.info("Warming up STT models...")
             
-            # Warm up Hugging Face model
-            if settings.HUGGINGFACE_API_KEY:
-                try:
-                    self.hf_pipeline = pipeline(
-                        "automatic-speech-recognition",
-                        model=settings.DEFAULT_STT_MODEL,
-                        token=settings.HUGGINGFACE_API_KEY
-                    )
-                    logger.info(f"Hugging Face model {settings.DEFAULT_STT_MODEL} loaded")
-                except Exception as e:
-                    logger.warning(f"Failed to load Hugging Face model: {str(e)}")
-            
+            # Dynamic hardware detection
+            if torch.cuda.is_available():
+                device = "cuda"
+                compute_type = "float16"  # GPU-friendly
+                model_size = "medium"     # use larger model for accuracy on GPU
+                logger.info("CUDA detected — using GPU with float16 and medium model")
+            else:
+                device = "cpu"
+                compute_type = "int8"     # fastest for CPU
+                model_size = "small"      # small model for speed on CPU
+                logger.info("No GPU detected — using CPU with int8 and small model")
+
+            # Load Faster-Whisper model
+            try:
+                self.fw_model = WhisperModel(
+                    model_size,   # dynamic based on hardware
+                    device=device,
+                    compute_type=compute_type,
+                )
+                logger.info(f"Faster-Whisper model loaded ({model_size}, {device}, {compute_type})")
+            except Exception as e:
+                logger.warning(f"Failed to load Faster-Whisper model: {e}")
+                
             # Warm up OpenAI client
             if settings.OPENAI_API_KEY:
                 try:
@@ -67,36 +97,50 @@ class STTService:
         except Exception as e:
             logger.error(f"Failed to warm up STT models: {str(e)}")
     
-    async def _transcribe_with_hf(self, audio_data: bytes) -> Dict[str, Any]:
-        """Transcribe audio using Hugging Face Whisper."""
+    async def _transcribe_with_whisper(self, audio_data: bytes) -> Dict[str, Any]:
+        """Transcribe audio using Faster-Whisper (local)."""
         start_time = time.time()
-        
         try:
-            if not self.hf_pipeline:
-                raise Exception("Hugging Face model not loaded")
-            
-            # Process audio for HF model
+            if not self.fw_model:
+                raise Exception("Faster-Whisper model not loaded")
+
+            # Process audio to standard mono/16k WAV
             processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
-            
-            # Transcribe
-            result = self.hf_pipeline(processed_audio)
-            transcription = result["text"].strip()
-            
+
+            # Decode WAV -> float32 mono [-1, 1]
+            with wave.open(io.BytesIO(processed_audio), "rb") as w:
+                sr = w.getframerate()
+                ch = w.getnchannels()
+                sw = w.getsampwidth()
+                frames = w.readframes(w.getnframes())
+            if sw != 2:
+                raise ValueError(f"Expected 16-bit WAV, got {sw*8}-bit")
+            arr = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+            if ch > 1:
+                arr = arr.reshape(-1, ch).mean(axis=1)
+
+            # Transcribe with Faster-Whisper
+            segments, info = self.fw_model.transcribe(
+                arr,
+                beam_size=5,
+                language="en",  # set None for auto-detect
+            )
+            text = " ".join(seg.text for seg in segments).strip()
+
             latency = time.time() - start_time
-            
-            logger.debug(f"HF transcription completed in {latency:.3f}s")
-            
+            logger.debug(f"Faster-Whisper transcription completed in {latency:.3f}s")
+
             return {
-                "text": transcription,
-                "model": "huggingface_whisper",
+                "text": text,
+                "model": "faster_whisper_small",
                 "latency": latency,
-                "confidence": result.get("confidence", 0.0)
+                "confidence": 1.0  # FW doesn't return confidence
             }
-            
         except Exception as e:
             latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_transcribe_with_hf", "latency": latency})
+            log_error_with_context(logger, e, {"method": "_transcribe_with_whisper", "latency": latency})
             raise
+        
     
     async def _transcribe_with_openai(self, audio_data: bytes) -> Dict[str, Any]:
         """Transcribe audio using OpenAI Whisper."""
@@ -110,13 +154,16 @@ class STTService:
             processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
             
             # Transcribe using OpenAI
+            file_obj = io.BytesIO(processed_audio)
+            file_obj.name = "audio.wav"  # OpenAI SDK reads filename from file-like
+
             response = await self.openai_client.audio.transcriptions.create(
                 model="whisper-1",
-                file=("audio.wav", processed_audio, "audio/wav"),
-                response_format="json"
+                file=file_obj,
+                response_format="json",
             )
             
-            transcription = response.text.strip()
+            transcription = (getattr(response, "text", "") or "").strip()
             latency = time.time() - start_time
             
             logger.debug(f"OpenAI transcription completed in {latency:.3f}s")
@@ -151,9 +198,9 @@ class STTService:
             self.performance_stats["total_transcriptions"] += 1
             
             # Try primary service first (unless fallback is explicitly requested)
-            if not use_fallback and self.hf_pipeline:
+            if not use_fallback:# and self.hf_pipeline:
                 try:
-                    result = await self._transcribe_with_hf(audio_data)
+                    result = await self._transcribe_with_whisper(audio_data)
                     self._update_stats(result["latency"], True)
                     return result
                 except Exception as e:
