@@ -12,7 +12,7 @@ import wave
 import numpy as np
 from unittest.mock import Mock, patch, AsyncMock
 from src.services.stt_service import STTService
-from src.utils.config import get_settings
+from src.utils import get_settings
 
 
 @pytest.fixture

@@ -235,14 +235,13 @@ class TestTTSService:
         sentences = tts_service._split_into_sentences(text)
         assert sentences == ["Hello world this is a test"]
     
-    @pytest.mark.asyncio
-    async def test_warm_up_cache(self, tts_service):
+    def test_warm_up_cache(self, tts_service):
         """Test cache warm-up functionality."""
         with patch.object(tts_service, 'synthesize_speech', new_callable=AsyncMock) as mock_synthesize:
-            await tts_service.warm_up_cache()
+            tts_service.warm_up_cache()
             
             # Should be called for each common phrase
-            assert mock_synthesize.call_count == 5  # Number of common phrases
+            assert mock_synthesize.call_count == 8  # Number of common phrases
     
     def test_get_performance_stats(self, tts_service):
         """Test performance statistics retrieval."""
