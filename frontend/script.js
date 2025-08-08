@@ -372,7 +372,7 @@ class EchoAIClient {
                 }
             });
 
-            // Create audio context for streaming
+            // Create audio context for streaming - real-time processing.
             const audioContext = new AudioContext();
             const source = audioContext.createMediaStreamSource(stream);
             const processor = audioContext.createScriptProcessor(4096, 1, 1);
@@ -387,7 +387,7 @@ class EchoAIClient {
                 type: 'start_streaming'
             }));
 
-            // Process audio data
+            // Process audio data - in real-time
             processor.onaudioprocess = (event) => {
                 if (!this.isStreaming) return;
 
