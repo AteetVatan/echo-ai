@@ -1,0 +1,53 @@
+JOHN DOE - SENIOR SOFTWARE ENGINEER
+
+PROFESSIONAL SUMMARY
+Experienced software engineer with 8+ years in full-stack development, specializing in Python, JavaScript, and cloud technologies. Proven track record of delivering scalable solutions and leading development teams.
+
+TECHNICAL SKILLS
+Programming Languages: Python, JavaScript, TypeScript, Java, Go
+Frameworks: Django, Flask, React, Node.js, Spring Boot
+Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
+Cloud Platforms: AWS, Azure, Google Cloud Platform
+DevOps: Docker, Kubernetes, Terraform, CI/CD pipelines
+Machine Learning: TensorFlow, PyTorch, scikit-learn
+
+WORK EXPERIENCE
+
+Senior Software Engineer | TechCorp Inc. | 2021-Present
+- Led development of microservices architecture serving 1M+ users
+- Implemented CI/CD pipelines reducing deployment time by 60%
+- Mentored junior developers and conducted code reviews
+- Technologies: Python, Django, React, AWS, Docker
+
+Software Engineer | StartupXYZ | 2019-2021
+- Built RESTful APIs and frontend applications
+- Collaborated with product team to define requirements
+- Participated in agile development cycles
+- Technologies: Python, Flask, JavaScript, PostgreSQL
+
+Junior Developer | WebDev Solutions | 2017-2019
+- Developed web applications using modern frameworks
+- Fixed bugs and implemented new features
+- Worked in cross-functional teams
+- Technologies: Python, Django, HTML/CSS, JavaScript
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of Technology | 2013-2017
+GPA: 3.8/4.0
+
+CERTIFICATIONS
+- AWS Certified Solutions Architect
+- Google Cloud Professional Developer
+- Certified Scrum Master (CSM)
+
+PROJECTS
+Personal Finance Tracker: Full-stack application for budget management
+AI Chatbot: Natural language processing chatbot for customer service
+E-commerce Platform: Multi-vendor marketplace with payment integration
+
+LANGUAGES
+English (Native), Spanish (Conversational)
+
+INTERESTS
+Open source contribution, machine learning, cloud architecture, technical writing
