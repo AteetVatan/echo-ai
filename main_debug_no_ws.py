@@ -32,13 +32,20 @@ import sys
 import os
 import time
 import base64
+import numpy as np
+import io
+import wave
 from pathlib import Path
 from typing import Optional
+from src.utils import validate_api_keys
+from src.services.stt_service import stt_service
+from src.services.llm_service import llm_service
+from src.services.tts_service import tts_service
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.agents.voice_clone_agent import voice_clone_agent
+from src.services.voice_pipeline import voice_pipeline
 from src.utils import get_settings, setup_logging, get_logger
 from src.utils.audio.audio_utils import audio_processor
 
@@ -46,11 +53,7 @@ from src.utils.audio.audio_utils import audio_processor
 def create_test_audio() -> bytes:
     """Create a simple test audio file for debugging."""
     try:
-        # Create a simple sine wave audio for testing
-        import numpy as np
-        import io
-        import wave
-        
+        # Create a simple sine wave audio for testing        
         # Generate a 1-second sine wave at 440 Hz
         sample_rate = 16000
         duration = 1.0
@@ -100,8 +103,7 @@ async def debug_stt_only(audio_data: bytes) -> dict:
         processed_audio = await audio_processor.process_audio_for_stt(audio_data)
         logger.info(f"Audio processed: {len(processed_audio)} bytes")
         
-        # Test STT
-        from src.services.stt_service import stt_service
+        # Test STT        
         start_time = time.time()
         
         result = await stt_service.transcribe_audio(processed_audio)
@@ -123,7 +125,7 @@ async def debug_llm_only(text: str) -> dict:
     logger.info("Testing LLM Service...")
     
     try:
-        from src.services.llm_service import llm_service
+        
         
         start_time = time.time()
         result = await llm_service.generate_response(text)
@@ -145,8 +147,6 @@ async def debug_tts_only(text: str) -> dict:
     logger.info("🔊 Testing TTS Service...")
     
     try:
-        from src.services.tts_service import tts_service
-        
         start_time = time.time()
         result = await tts_service.synthesize_speech(text)
         
@@ -170,12 +170,12 @@ async def debug_full_pipeline(audio_data: bytes) -> dict:
         start_time = time.time()
         
         # Process through agent
-        result = await voice_clone_agent.process_voice_input(audio_data)
+        result = await voice_pipeline.process_voice_input(audio_data)
         
         total_latency = time.time() - start_time
         
-        if "error" in result:
-            logger.error(f"Pipeline failed: {result['error']}")
+        if not result:
+            logger.error(f"Pipeline failed")
             return result
         
         logger.info(f" Full pipeline completed in {total_latency:.2f}s")
@@ -222,7 +222,7 @@ async def main():
     
     # Parse command line arguments
     # create os path
-    audio_file_path = os.path.join(os.path.dirname(__file__), 'audio_cache', 'DTspCYcPUEd8ZsrSm2qm_4788221984486102553.mp3')
+    audio_file_path = os.path.join(os.path.dirname(__file__), 'audio_cache', 'test_file.mp3')
     # audio_cache/DTspCYcPUEd8ZsrSm2qm_4788221984486102553.wav
     logger.info(f" Using audio file: {audio_file_path}")
     
@@ -245,8 +245,7 @@ async def main():
     
     logger.info(f" Audio data size: {len(audio_data)} bytes")
     
-    # Validate API keys
-    from src.utils import validate_api_keys
+    # Validate API keys    
     if not validate_api_keys():
         logger.warning(" Some API keys are missing or invalid")
         logger.info("Please check your .env file")
@@ -254,7 +253,7 @@ async def main():
     # Warm up services
     logger.info(" Warming up AI services...")
     try:
-        await voice_clone_agent.warm_up_services()
+        # Services will be warmed up automatically when needed
         logger.info(" Services warmed up successfully")
     except Exception as e:
         logger.error(f" Failed to warm up services: {str(e)}")
@@ -266,6 +265,9 @@ async def main():
     logger.info(" Testing Individual Components...")
     
     # Test STT
+    await stt_service.warm_up_models()
+    
+    
     stt_result = await debug_stt_only(audio_data)
     if "error" in stt_result:
         logger.error(" STT test failed, stopping")
@@ -279,6 +281,7 @@ async def main():
     logger.info("-" * 30)
     
     # Test LLM
+    await llm_service.warm_up_models()
     llm_result = await debug_llm_only(transcription)
     if "error" in llm_result:
         logger.error("LLM test failed, stopping")
@@ -292,6 +295,7 @@ async def main():
     logger.info("-" * 30)
     
     # Test TTS
+    await tts_service.warm_up_cache()
     tts_result = await debug_tts_only(response_text)
     if "error" in tts_result:
         logger.error("TTS test failed")
@@ -320,7 +324,7 @@ async def main():
     if "error" not in pipeline_result:
         logger.info(f"   - Total pipeline time: {pipeline_result.get('pipeline_latency', 0):.2f}s")
     
-    logger.info("🎉 Debug script finished successfully!")
+    logger.info("Debug script finished successfully!")
 
 
 if __name__ == "__main__":
