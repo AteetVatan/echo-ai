@@ -23,7 +23,7 @@ class DBOperations:
     def _sanitize_table_name(self, voice_id: str) -> str:
         return f"{self.TABLE_PREFIX}_{''.join(c if c.isalnum() else '_' for c in voice_id)}"
 
-    def init_voice_table(self, voice_id: str):
+    def init_voice_table(self, voice_id: str) -> str:
         """Create a table for the given voice_id if not exists."""
         table_name = self._sanitize_table_name(voice_id)
         try:
@@ -38,15 +38,22 @@ class DBOperations:
                     );
                 """)
             self.logger.info(f"Table ensured: {table_name}")
+            return table_name
         except Exception as e:
             self.logger.error(f"Failed to create table for {voice_id}: {str(e)}")
-
+            raise
     def save_audio(self, text: str, audio_data: bytes, voice_id: str) -> str:
         """Save audio and JSON metadata locally, store entry in voice-specific table."""
-        table_name = self._sanitize_table_name(voice_id)
-        self.init_voice_table(voice_id)
+        #table_name = self._sanitize_table_name(voice_id)
+        table_name = self.init_voice_table(voice_id)
 
         try:
+            #first check that this text is not already in the database
+            res_file = self.load_audio(text, voice_id)
+            if res_file:
+                self.logger.info(f"Audio already exists for {text}, voice_id={voice_id}")
+                return res_file
+            
             text_hash = abs(hash(text))
             file_name = f"{voice_id}_{text_hash}.mp3"
             json_name = f"{voice_id}_{text_hash}.json"

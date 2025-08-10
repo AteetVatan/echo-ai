@@ -51,7 +51,7 @@ class ConnectionManager:
                 self.session_data[session_id]["message_count"] += 1
                 self.session_data[session_id]["last_activity"] = asyncio.get_event_loop().time()
             except Exception as e:
-                self.logger.error(f"Failed to send message to {session_id}: {str(e)}")
+                self.logger.error(f"Failed to send message to {session_id}: {str(e)}", exc_info=True)
                 self.disconnect(session_id)
     
     def get_active_sessions(self) -> Dict[str, Dict[str, Any]]:
