@@ -80,7 +80,7 @@ EchoAI/
 │   │   ├── llm_service.py    # Language model service with conversation memory
 │   │   └── tts_service.py    # Text-to-Speech service with caching
 │   ├── agents/            # AI agent orchestration
-│   │   └── voice_clone_agent.py  # Main agent coordinating STT, LLM, TTS
+│   │   └── (removed - replaced by hybrid architecture)
 │   └── utils/             # Utility modules and helpers
 │       ├── config.py         # Configuration management with environment variables
 │       ├── logging.py        # Structured logging and performance monitoring
