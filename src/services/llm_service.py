@@ -178,8 +178,8 @@ class LLMService:
             ))
             
             # Generate response
-            response = await self.mistral_client.chat(
-                model=self.mistral_model,
+            response = self.mistral_client.chat(
+                model=self.mistral_model, #mistral-small
                 messages=messages,
                 temperature=self.temperature,
                 #max_tokens=500
