@@ -14,8 +14,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import uvicorn
+import platform
+import subprocess
+import os
 
-from src.agents.voice_clone_agent import voice_clone_agent
+from src.services.voice_pipeline import voice_pipeline
+from src.services.langchain_rag_agent import LangChainRAGAgent
+from src.services.stt_service import stt_service
+from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
 from src.utils import get_settings, validate_api_keys
 from src.utils import setup_logging, get_logger
@@ -48,6 +54,9 @@ app.add_middleware(
 # Global connection manager
 manager = ConnectionManager()
 
+# Initialize RAG agent
+rag_agent = LangChainRAGAgent()
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -59,8 +68,12 @@ async def startup_event():
         if not validate_api_keys():
             logger.warning("Some API keys are missing or invalid. Check your .env file.")
         
-        # Warm up agent services
-        await voice_clone_agent.warm_up_services()
+        # Warm up services
+        await asyncio.gather(
+            stt_service.warm_up_models(),
+            llm_service.warm_up_models()
+        )
+        await tts_service.warm_up_cache()
         
         logger.info("EchoAI Voice Chat API started successfully")
         
@@ -102,17 +115,17 @@ async def health_check():
     """Health check endpoint."""
     try:
         # Check if services are available
-        agent_stats = voice_clone_agent.get_performance_summary()
+        pipeline_stats = voice_pipeline.get_performance_stats()
         
         return {
             "status": "healthy",
             "timestamp": asyncio.get_event_loop().time(),
             "active_connections": len(manager.active_connections),
             "services": {
-                "agent": "available",
-                "stt": "available" if agent_stats.get("stt") else "unavailable",
-                "llm": "available" if agent_stats.get("llm") else "unavailable",
-                "tts": "available" if agent_stats.get("tts") else "unavailable"
+                "pipeline": "available",
+                "stt": "available",
+                "llm": "available", 
+                "tts": "available"
             }
         }
     except Exception as e:
@@ -124,14 +137,23 @@ async def health_check():
 async def get_stats():
     """Get system statistics."""
     try:
-        agent_stats = voice_clone_agent.get_performance_summary()
+        # Get pipeline and service statistics
+        pipeline_stats = voice_pipeline.get_performance_stats()
+        stt_stats = stt_service.get_performance_stats()
+        llm_stats = llm_service.get_performance_stats()
+        tts_stats = tts_service.get_performance_stats()
         active_sessions = manager.get_active_sessions()
         
         return {
             "active_connections": len(manager.active_connections),
             "active_sessions": active_sessions,
             "streaming_sessions": sum(manager.streaming_sessions.values()),
-            "agent_performance": agent_stats,
+            "pipeline_performance": pipeline_stats,
+            "service_performance": {
+                "stt": stt_stats,
+                "llm": llm_stats,
+                "tts": tts_stats
+            },
             "server_info": {
                 "version": "1.0.0",
                 "uptime": asyncio.get_event_loop().time()
@@ -146,7 +168,7 @@ async def get_stats():
 async def clear_conversation():
     """Clear conversation history."""
     try:
-        voice_clone_agent.clear_conversation()
+        voice_pipeline.clear_conversation()
         return {"message": "Conversation cleared successfully"}
     except Exception as e:
         logger.error(f"Failed to clear conversation: {str(e)}")
@@ -179,7 +201,10 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 
+                logger.info(f"session_id: {session_id}")
+                logger.info(f"message: {message}")
                 message_type = message.get("type")
+                logger.info(f"message_type: {message_type}")
                 
                 if message_type == "audio":
                     #Full audio file is sent in one message.
@@ -246,8 +271,8 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
             "message": "Processing your voice input..."
         })
         
-        # Process voice input through agent
-        result = await voice_clone_agent.process_voice_input(audio_data, session_id)
+        # Process voice input through pipeline
+        result = await voice_pipeline.process_voice_input(audio_data, session_id)
         
         if "error" in result:
             await manager.send_message(session_id, {
@@ -287,6 +312,14 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
 async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
     """Handle streaming audio chunk from client."""
     try:
+        # Check if session is in streaming mode
+        if not manager.streaming_sessions.get(session_id, False):
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": "Not in streaming mode. Send 'start_streaming' first."
+            })
+            return
+        
         # Extract audio chunk data
         audio_chunk_b64 = message.get("audio_chunk")
         if not audio_chunk_b64:
@@ -297,7 +330,32 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
             return
         
         # Decode base64 audio chunk
-        audio_chunk = base64.b64decode(audio_chunk_b64)
+        try:
+            audio_chunk = base64.b64decode(audio_chunk_b64)
+        except Exception as e:
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": f"Invalid base64 audio data: {str(e)}"
+            })
+            return
+        
+        # Validate chunk size (prevent memory abuse)
+        if len(audio_chunk) > 1024 * 1024:  # 1MB limit per chunk
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": "Audio chunk too large (max 1MB per chunk)"
+            })
+            return
+        
+        # Check total buffer size (prevent memory overflow)
+        current_buffer = manager.get_audio_buffer(session_id)
+        total_size = sum(len(chunk) for chunk in current_buffer) + len(audio_chunk)
+        if total_size > 10 * 1024 * 1024:  # 10MB total buffer limit
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": "Audio buffer full (max 10MB total). Stop streaming to process."
+            })
+            return
         
         # Add to session buffer
         manager.add_audio_chunk(session_id, audio_chunk)
@@ -306,7 +364,8 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         await manager.send_message(session_id, {
             "type": "chunk_received",
             "chunk_size": len(audio_chunk),
-            "buffer_size": len(manager.get_audio_buffer(session_id))
+            "buffer_size": len(manager.get_audio_buffer(session_id)),
+            "total_bytes": total_size + len(audio_chunk)
         })
         
         logger.debug(f"Audio chunk received for session {session_id}: {len(audio_chunk)} bytes")
@@ -346,7 +405,15 @@ async def handle_start_streaming(session_id: str, message: Dict[str, Any]):
 async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
     """Handle stop streaming request and process accumulated audio."""
     try:
-        # Set streaming status
+        # Check if session was actually streaming
+        if not manager.streaming_sessions.get(session_id, False):
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": "Not in streaming mode. No audio to process."
+            })
+            return
+        
+        # Set streaming status to false
         manager.set_streaming_status(session_id, False)
         
         # Get accumulated audio chunks
@@ -354,47 +421,69 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         
         if not audio_chunks:
             await manager.send_message(session_id, {
-                "type": "error",
-                "message": "No audio data to process"
+                "type": "streaming_stopped",
+                "message": "Streaming stopped, but no audio data was received",
+                "chunks_count": 0
             })
             return
+        
+        # Calculate total audio size
+        total_audio_size = sum(len(chunk) for chunk in audio_chunks)
         
         # Send processing status
         await manager.send_message(session_id, {
             "type": "processing",
             "message": "Processing streaming audio...",
-            "chunks_count": len(audio_chunks)
+            "chunks_count": len(audio_chunks),
+            "total_audio_bytes": total_audio_size
         })
         
-        # Process streaming voice input through agent
-        result = await voice_clone_agent.process_streaming_voice(audio_chunks, session_id)
+        # Process streaming voice input through pipeline
+        result = await voice_pipeline.process_streaming_voice(audio_chunks, session_id)
         
-        if "error" in result:
+        if result.error:
             await manager.send_message(session_id, {
                 "type": "error",
-                "message": result["error"]
+                "message": result.error
             })
+            # Clear buffer even on error to prevent memory leak
+            manager.clear_audio_buffer(session_id)
             return
         
         # Encode response audio
-        response_audio_b64 = base64.b64encode(result["audio_data"]).decode()
+        response_audio_b64 = base64.b64encode(result.audio_data).decode()
         
-        # Send response
+        # Send response with enhanced metadata
         await manager.send_message(session_id, {
             "type": "streaming_response",
-            "transcription": result["transcription"],
-            "response_text": result["response_text"],
+            "transcription": result.transcription,
+            "response_text": result.response_text,
             "audio": response_audio_b64,
             "latency": {
-                "pipeline": result["pipeline_latency"],
-                "chunks_processed": result["chunks_processed"]
+                "pipeline": result.pipeline_latency,
+                "stt": result.stt_latency,
+                "rag": result.rag_latency,
+                "tts": result.tts_latency,
+                "chunks_processed": result.chunks_processed
+            },
+            "audio_info": {
+                "input_chunks": len(audio_chunks),
+                "input_bytes": total_audio_size,
+                "output_bytes": len(result.audio_data)
+            },
+            "cache_info": {
+                "semantic_cache_hit": result.semantic_cache_hit,
+                "similarity_score": result.similarity_score,
+                "rag_used": result.rag_used
             }
         })
         
-        # Clear audio buffer
+        # Clear audio buffer after successful processing
         manager.clear_audio_buffer(session_id)
         
-        logger.info(f"Streaming voice processing completed for session {session_id}")
+        logger.info(f"Streaming voice processing completed for session {session_id}: "
+                   f"{len(audio_chunks)} chunks, {total_audio_size} bytes, "
+                   f"{result.pipeline_latency:.3f}s latency")
         
     except Exception as e:
         logger.error(f"Failed to process streaming audio for session {session_id}: {str(e)}")
@@ -402,6 +491,8 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
             "type": "error",
             "message": f"Failed to process streaming audio: {str(e)}"
         })
+        # Clear buffer on error to prevent memory leak
+        manager.clear_audio_buffer(session_id)
 
 
 async def handle_text_message(session_id: str, message: Dict[str, Any]):
@@ -421,8 +512,8 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             "message": "Generating response..."
         })
         
-        # Generate response through agent
-        result = await voice_clone_agent.generate_response_tool(text)
+        # Process text input through pipeline
+        result = await voice_pipeline.process_text_input(text, session_id)
         
         if "error" in result:
             await manager.send_message(session_id, {
@@ -431,18 +522,8 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             })
             return
         
-        # Synthesize speech
-        tts_result = await voice_clone_agent.synthesize_speech_tool(result["response_text"])
-        
-        if "error" in tts_result:
-            await manager.send_message(session_id, {
-                "type": "error",
-                "message": tts_result["error"]
-            })
-            return
-        
         # Encode response audio
-        response_audio_b64 = base64.b64encode(tts_result["audio_data"]).decode()
+        response_audio_b64 = base64.b64encode(result["audio_data"]).decode()
         
         # Send response
         await manager.send_message(session_id, {
@@ -450,8 +531,9 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             "response_text": result["response_text"],
             "audio": response_audio_b64,
             "latency": {
-                "llm": result["latency"],
-                "tts": tts_result["latency"]
+                "pipeline": result["pipeline_latency"],
+                "rag": result.get("rag_latency", 0),
+                "tts": result.get("tts_latency", 0)
             }
         })
         
@@ -463,9 +545,39 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             "type": "error",
             "message": f"Failed to process text: {str(e)}"
         })
+        
+
+def free_port(port):
+    """
+    Frees the given TCP port by finding and killing the process that uses it.
+    Works on Windows, macOS, and Linux.
+    """
+    try:
+        if platform.system() == "Windows":
+            # Find PID
+            result = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode()
+            for line in result.strip().split("\n"):
+                if f":{port}" in line and "LISTENING" in line:
+                    pid = int(line.strip().split()[-1])
+                    print(f"Port {port} in use by PID {pid}, killing...")
+                    subprocess.call(f"taskkill /PID {pid} /F", shell=True)
+                    print(f"Port {port} freed")
+        else:
+            # macOS / Linux
+            result = subprocess.check_output(f"lsof -t -i:{port}", shell=True).decode().strip().split("\n")
+            for pid in result:
+                if pid.strip():
+                    print(f"Port {port} in use by PID {pid}, killing...")
+                    os.system(f"kill -9 {pid}")
+                    print(f"Port {port} freed")
+    except subprocess.CalledProcessError:
+        print(f"Port {port} is already free")
 
 
-if __name__ == "__main__":
+def run_server():
+    # Free port if already in use
+    free_port(settings.PORT)
+    
     uvicorn.run(
         "src.api.main:app",
         host=settings.HOST,
