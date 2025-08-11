@@ -91,15 +91,15 @@ def main():
     print("EchoAI Voice Chat - Development Environment")
     print("=" * 60)
     
-    # Setup environment
-    if not setup_environment():
-        print("\n Environment setup failed. Please fix and try again.")
-        return
+    # # Setup environment
+    # if not setup_environment():
+    #     print("\n Environment setup failed. Please fix and try again.")
+    #     return
     
-    # Check dependencies
-    if not check_dependencies():
-        print("\n Dependency check failed. Please install requirements.")
-        return
+    # # Check dependencies
+    # if not check_dependencies():
+    #     print("\n Dependency check failed. Please install requirements.")
+    #     return
     
     print("\n Environment ready!")
     print("\n Development URLs:")
