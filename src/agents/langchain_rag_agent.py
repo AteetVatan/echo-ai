@@ -117,7 +117,10 @@ class LangChainRAGAgent:
             # Delete existing DB as it will be done only once
             if os.path.exists(knowledge_db_path):
                 shutil.rmtree(knowledge_db_path)
-                
+            # import numpy as np
+            # if not hasattr(np, "float_"):  # NumPy 2.x
+            #     np.float_ = np.float64
+        
             os.makedirs(knowledge_db_path, exist_ok=True)
             
             knowledge_base = Chroma(
@@ -324,7 +327,7 @@ class LangChainRAGAgent:
             
             # Step 1: Check reply cache for semantic similarity
             cached_reply = await self.reply_cache.find_similar_reply(user_text)
-            if cached_reply and cached_reply.similarity_score >= 0.85:
+            if cached_reply and cached_reply.similarity_score >= 0.95:
                 logger.info(f"Found cached reply with similarity {cached_reply.similarity_score:.3f}")
                 return {
                     "response_text": cached_reply.response_text,

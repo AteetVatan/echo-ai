@@ -13,7 +13,7 @@ mistralai>=0.1.2               # Mistral AI client
 transformers>=4.52.2           # Hugging Face transformers
 torch>=2.4.1                   # PyTorch for ML models
 torchaudio>=2.4.1              # Audio processing with PyTorch
-numpy>=1.26.4                  # Numerical computing
+numpy>=1.26.4,<2.0                 # Numerical computing
 
 # Audio Processing - Essential
 soundfile==0.12.1              # Audio file I/O

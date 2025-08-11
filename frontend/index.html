@@ -391,10 +391,47 @@
             padding: 25px;
             background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
             position: relative;
+            scroll-behavior: smooth;
+            /* Enable smooth scrolling */
         }
 
+        /* Add scroll indicator for new messages */
+        .conversation::after {
+            content: '';
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .conversation.has-new-messages::after {
+            opacity: 1;
+            animation: newMessagePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes newMessagePulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+            }
+
+            50% {
+                transform: scale(1.2);
+                box-shadow: 0 0 0 10px rgba(102, 126, 234, 0);
+            }
+        }
+
+        /* Enhanced scrollbar styling */
         .conversation::-webkit-scrollbar {
-            width: 8px;
+            width: 10px;
         }
 
         .conversation::-webkit-scrollbar-track {
@@ -405,6 +442,11 @@
         .conversation::-webkit-scrollbar-thumb {
             background: linear-gradient(135deg, #667eea, #764ba2);
             border-radius: 10px;
+            border: 2px solid #f1f1f1;
+        }
+
+        .conversation::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5a6fd8, #6a4190);
         }
 
         .message {
@@ -660,6 +702,68 @@
     </div>
 
     <script src="/static/script.js"></script>
+
+    <!-- Auto-scroll functionality -->
+    <script>
+        // Auto-scroll to bottom when new messages appear
+        function scrollToBottom() {
+            const conversation = document.getElementById('conversation');
+            conversation.scrollTo({
+                top: conversation.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        // Add scroll indicator when new messages arrive
+        function showNewMessageIndicator() {
+            const conversation = document.getElementById('conversation');
+            conversation.classList.add('has-new-messages');
+
+            // Remove indicator after animation
+            setTimeout(() => {
+                conversation.classList.remove('has-new-messages');
+            }, 3000);
+        }
+
+        // Monitor for new messages and auto-scroll
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Check if new message was added
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('message')) {
+                            setTimeout(() => {
+                                scrollToBottom();
+                                showNewMessageIndicator();
+                            }, 100);
+                        }
+                    });
+                }
+            });
+        });
+
+        // Start observing the conversation div
+        document.addEventListener('DOMContentLoaded', () => {
+            const conversation = document.getElementById('conversation');
+            if (conversation) {
+                observer.observe(conversation, {
+                    childList: true,
+                    subtree: true
+                });
+
+                // Auto-scroll on page load
+                setTimeout(scrollToBottom, 100);
+            }
+        });
+
+        // Auto-scroll when conversation is cleared
+        const clearBtn = document.getElementById('clearBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                setTimeout(scrollToBottom, 100);
+            });
+        }
+    </script>
 </body>
 
 </html>

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
-from src.services.langchain_rag_agent import rag_agent
+from src.agents.langchain_rag_agent import rag_agent
 from src.utils.audio import audio_processor, audio_stream_processor
 from src.utils import get_logger, log_performance, log_error_with_context
 
