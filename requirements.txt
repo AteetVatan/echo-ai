@@ -7,33 +7,30 @@ fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 websockets>=12.0
 
-# AI/ML Libraries - Hybrid Architecture
-openai>=1.99.6                 # OpenAI API client (fallback LLM)
-mistralai>=0.1.2               # Mistral AI client (primary LLM)
+# AI/ML Libraries - Core Functionality
+openai>=1.99.6                 # OpenAI API client
+mistralai>=0.1.2               # Mistral AI client
 transformers>=4.52.2           # Hugging Face transformers
 torch>=2.4.1                   # PyTorch for ML models
 torchaudio>=2.4.1              # Audio processing with PyTorch
-datasets>=2.14.6               # Dataset handling
 numpy>=1.26.4                  # Numerical computing
 
-
-# Audio Processing - FFmpeg + NumPy
+# Audio Processing - Essential
 soundfile==0.12.1              # Audio file I/O
-imageio-ffmpeg==0.5.1          # FFmpeg integration (bundled ffmpeg)
+imageio-ffmpeg==0.5.1          # FFmpeg integration
 faster-whisper==1.0.3          # Speech-to-Text processing
-av>=12,<14                     # Video/audio handling (for faster-whisper)
+av>=12,<14                     # Video/audio handling
 
-# LangChain & RAG
-langchain>=0.3.27              # LangChain framework for RAG
+# LangChain & RAG - Core
+langchain>=0.3.27              # LangChain framework
 langchain-community>=0.3.27    # LangChain community integrations
 langchain-openai>=0.3.29       # LangChain OpenAI integration
 langchain-mistralai>=0.2.11    # LangChain Mistral integration
 langchain-core>=0.3.74         # LangChain core components
 
 # Vector Database & Embeddings
-chromadb>=0.4.22               # Vector database for knowledge storage
-sentence-transformers>=2.2.2   # Embedding models for semantic search
-pgvector>=0.2.0                # PostgreSQL vector extension (for production)
+chromadb>=0.4.22               # Vector database
+sentence-transformers>=2.2.2   # Embedding models
 
 # HTTP/Async
 aiohttp==3.9.1                 # Async HTTP client
@@ -41,32 +38,6 @@ httpx==0.25.2                  # Modern HTTP client
 
 # Configuration & Utilities
 python-dotenv>=1.0.0           # Environment variable management
-pydantic>=2.7.4                # Data validation (compatible with LangChain)
+pydantic>=2.7.4                # Data validation
 pydantic-settings>=2.1.0       # Settings management
 
-# Database
-asyncpg>=0.30.0                # PostgreSQL async driver (for PgVector)
-# Note: sqlite3 is built-in to Python (used for local metadata storage)
-
-# Testing
-pytest==7.4.3                  # Testing framework
-pytest-asyncio==0.21.1         # Async testing support
-pytest-mock==3.12.0            # Mocking utilities
-
-# Development Tools
-black==23.11.0                 # Code formatting
-flake8==6.1.0                  # Linting
-mypy==1.7.1                    # Type checking
-
-# Deployment
-gunicorn==21.2.0               # WSGI HTTP Server
-
-# ==================================================
-# Notes:
-# - Uses LangChain instead of Agno for stable RAG implementation
-# - Mistral as primary LLM, OpenAI as fallback
-# - ChromaDB for vector storage with sentence-transformers embeddings
-# - Uses FFmpeg (via imageio-ffmpeg) + NumPy for audio processing
-# - No MoviePy, pydub, or agno dependencies needed
-# - sqlite3 is built-in Python module for local storage
-# ==================================================
