@@ -96,7 +96,8 @@ class LangChainRAGAgent:
             vector_store = Chroma(
                 persist_directory=vector_db_path,
                 embedding_function=self.embeddings,
-                collection_name="echoai_reply_cache"
+                collection_name="echoai_reply_cache",
+                collection_metadata={"hnsw:space": "cosine"}  # cosine space to get 1.0 = perfect match.
             )
             
             logger.info("ChromaDB vector store initialized for reply cache")
@@ -122,7 +123,8 @@ class LangChainRAGAgent:
             knowledge_base = Chroma(
                 persist_directory=knowledge_db_path,
                 embedding_function=self.embeddings,
-                collection_name="echoai_self_info"
+                collection_name="echoai_self_info",
+                collection_metadata={"hnsw:space": "cosine"}  # cosine space to get 1.0 = perfect match.
             )
             
             # Load and index self-info data
@@ -600,8 +602,12 @@ class ReplyCacheManager:
             try:
                 docs = self.vector_store.similarity_search_with_score(user_text, k=3)
                 if docs:
-                    best_doc, best_score = docs[0]
-                    if best_score >= self.similarity_threshold:
+                    best_doc, distance = docs[0]  # distance in [0, 2] for cosine
+                    cos_sim = 1 - distance                 # cosine similarity in [-1, 1]
+                    sim_0_1 = (cos_sim + 1) / 2           # map to [0, 1] for UI/thresholds
+                    sim_percent = round(sim_0_1 * 100, 2) # 0–100%
+                    
+                    if sim_percent  >= self.similarity_threshold:
                         # Find the cached reply for this document
                         original_text = best_doc.metadata.get('original_text', best_doc.page_content)
                         cursor = self.db.conn.execute(
@@ -615,7 +621,7 @@ class ReplyCacheManager:
                                 response_text=match[1],
                                 audio_file_path=match[2],
                                 created_at=match[3],
-                                similarity_score=best_score
+                                similarity_score=sim_percent
                             )
             except Exception as e:
                 logger.warning(f"Semantic search in cache failed: {str(e)}")

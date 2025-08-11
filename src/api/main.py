@@ -19,13 +19,12 @@ import subprocess
 import os
 
 from src.services.voice_pipeline import voice_pipeline
-from src.services.langchain_rag_agent import LangChainRAGAgent
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
 from src.utils import get_settings, validate_api_keys
 from src.utils import setup_logging, get_logger
-from src.utils.audio import stream_processor
+from src.utils.audio import audio_stream_processor
 from src.api.connection_manager import ConnectionManager
 
 
@@ -50,12 +49,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add static file serving for frontend
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import pathlib
+
+#frontend directory path
+frontend_path = pathlib.Path(__file__).parent.parent.parent / "frontend"
+
+# Serve static files if frontend directory exists
+if frontend_path.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+
 
 # Global connection manager
 manager = ConnectionManager()
-
-# Initialize RAG agent
-rag_agent = LangChainRAGAgent()
 
 
 @app.on_event("startup")
@@ -106,8 +114,18 @@ async def root():
         "version": "1.0.0",
         "description": "Real-time AI voice chat with STT→LLM→TTS pipeline",
         "status": "running",
-        "active_connections": len(manager.active_connections)
+        "active_connections": len(manager.active_connections),
+        "frontend_url": "/static/index.html"
     }
+
+@app.get("/frontend")
+@app.head("/frontend")
+async def serve_frontend():
+    """Serve the frontend HTML file."""
+    if frontend_path.exists():
+        return FileResponse(str(frontend_path / "index.html"))
+    else:
+        raise HTTPException(status_code=404, detail="Frontend not found")
 
 
 @app.get("/health")
@@ -223,6 +241,9 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 elif message_type == "ping":
                     #Health check 
                     await manager.send_message(session_id, {"type": "pong"})
+                elif message_type == "streaming_buffer":
+                    # Process streaming buffer in real-time
+                    await handle_streaming_buffer(session_id, message)
                 else:
                     await manager.send_message(session_id, {
                         "type": "error",
@@ -274,29 +295,31 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         # Process voice input through pipeline
         result = await voice_pipeline.process_voice_input(audio_data, session_id)
         
-        if "error" in result:
+        # Check for errors
+        if result.error:
             await manager.send_message(session_id, {
                 "type": "error",
-                "message": result["error"]
+                "message": result.error
             })
             return
         
         # Encode response audio
-        response_audio_b64 = base64.b64encode(result["audio_data"]).decode()
+        response_audio_b64 = base64.b64encode(result.audio_data).decode()
         
         # Send response
         await manager.send_message(session_id, {
             "type": "response",
-            "transcription": result["transcription"],
-            "response_text": result["response_text"],
+            "transcription": result.transcription,
+            "response_text": result.response_text,
             "audio": response_audio_b64,
             "latency": {
-                "pipeline": result["pipeline_latency"],
-                "stt": result["stt_latency"],
-                "llm": result["llm_latency"],
-                "tts": result["tts_latency"]
+                "pipeline": result.pipeline_latency,
+                "stt": result.stt_latency,
+                "rag": result.rag_latency,
+                "llm": result.llm_latency,
+                "tts": result.tts_latency
             },
-            "models_used": result["models_used"]
+            "models_used": result.models_used
         })
         
         logger.info(f"Voice processing completed for session {session_id}")
@@ -515,25 +538,26 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         # Process text input through pipeline
         result = await voice_pipeline.process_text_input(text, session_id)
         
-        if "error" in result:
+        # Check for errors
+        if result.error:
             await manager.send_message(session_id, {
                 "type": "error",
-                "message": result["error"]
+                "message": result.error
             })
             return
         
         # Encode response audio
-        response_audio_b64 = base64.b64encode(result["audio_data"]).decode()
+        response_audio_b64 = base64.b64encode(result.audio_data).decode()
         
         # Send response
         await manager.send_message(session_id, {
             "type": "text_response",
-            "response_text": result["response_text"],
+            "response_text": result.response_text,
             "audio": response_audio_b64,
             "latency": {
-                "pipeline": result["pipeline_latency"],
-                "rag": result.get("rag_latency", 0),
-                "tts": result.get("tts_latency", 0)
+                "pipeline": result.pipeline_latency,
+                "rag": result.rag_latency,
+                "tts": result.tts_latency
             }
         })
         
@@ -545,7 +569,53 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             "type": "error",
             "message": f"Failed to process text: {str(e)}"
         })
+
+
+async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
+    """Handle real-time streaming buffer from client."""
+    try:
+        # Extract audio data
+        audio_b64 = message.get("audio")
+        if not audio_b64:
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": "No audio data provided"
+            })
+            return
         
+        # Decode audio
+        audio_data = base64.b64decode(audio_b64)
+        
+        # Process immediately (don't buffer)
+        result = await voice_pipeline.process_streaming_voice([audio_data], session_id)
+        
+        if result.error:
+            await manager.send_message(session_id, {
+                "type": "error",
+                "message": result.error
+            })
+            return
+        
+        # Send immediate response
+        response_audio_b64 = base64.b64encode(result.audio_data).decode()
+        
+        await manager.send_message(session_id, {
+            "type": "streaming_response",
+            "transcription": result.transcription,
+            "response_text": result.response_text,
+            "audio": response_audio_b64,
+            "latency": result.pipeline_latency
+        })
+        
+        logger.info(f"Real-time streaming response sent for session {session_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to process streaming buffer: {str(e)}")
+        await manager.send_message(session_id, {
+            "type": "error",
+            "message": f"Failed to process streaming buffer: {str(e)}"
+        })
+
 
 def free_port(port):
     """
