@@ -224,56 +224,30 @@
         }
 
         .instructions {
-            padding: 25px 30px;
+            padding: 8px 12px;
             background: #f8f9fa;
             border-bottom: 1px solid #eee;
         }
 
         .instructions h3 {
             color: #495057;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
             text-align: center;
-            font-size: 1.3em;
+            font-size: 0.9em;
         }
 
-        .instruction-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-bottom: 20px;
+        .instruction-text {
+            margin-bottom: 8px;
         }
 
-        .step {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 12px 15px;
-            background: white;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .step-number {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-
-        .step-text {
+        .instruction-text p {
             color: #495057;
-            font-size: 0.95em;
-            line-height: 1.4;
+            font-size: 0.7em;
+            line-height: 1.3;
+            margin-bottom: 3px;
         }
 
-        .step-text strong {
+        .instruction-text strong {
             color: #667eea;
             font-weight: 600;
         }
@@ -281,16 +255,16 @@
         .streaming-note {
             background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
             border: 1px solid #ffc107;
-            border-radius: 10px;
-            padding: 15px;
+            border-radius: 4px;
+            padding: 6px;
             text-align: center;
-            margin-top: 15px;
+            margin-top: 6px;
         }
 
         .streaming-note p {
             color: #856404;
             margin: 0;
-            font-size: 0.9em;
+            font-size: 0.65em;
         }
 
         .streaming-note strong {
@@ -339,17 +313,12 @@
             }
 
             .instructions {
-                padding: 20px;
+                padding: 8px;
             }
 
-            .step {
-                flex-direction: column;
+            .instruction-text p {
                 text-align: center;
-                gap: 10px;
-            }
-
-            .step-text {
-                text-align: center;
+                font-size: 0.65em;
             }
         }
     </style>
@@ -377,28 +346,12 @@
         <!-- Add instructions section -->
         <div class="instructions">
             <h3>📋 How to Use</h3>
-            <div class="instruction-steps">
-                <div class="step">
-                    <span class="step-number">1</span>
-                    <span class="step-text">Click <strong>🔌 Connect</strong> to connect to the AI server</span>
-                </div>
-                <div class="step">
-                    <span class="step-number">2</span>
-                    <span class="step-text">Click <strong>🎤 Start Recording</strong> to begin recording your
-                        voice</span>
-                </div>
-                <div class="step">
-                    <span class="step-number">3</span>
-                    <span class="step-text">Speak your message clearly into the microphone</span>
-                </div>
-                <div class="step">
-                    <span class="step-number">4</span>
-                    <span class="step-text">Click <strong>⏹️ Stop Recording</strong> when you're done speaking</span>
-                </div>
-                <div class="step">
-                    <span class="step-number">5</span>
-                    <span class="step-text">Wait for the AI to process and respond with voice</span>
-                </div>
+            <div class="instruction-text">
+                <p>1. Click <strong>🔌 Connect</strong> to connect to the AI server</p>
+                <p>2. Click <strong>🎤 Start Recording</strong> to begin recording your voice</p>
+                <p>3. Speak your message clearly into the microphone</p>
+                <p>4. Click <strong>⏹️ Stop Recording</strong> when you're done speaking</p>
+                <p>5. Wait for the AI to process and respond with voice</p>
             </div>
             <div class="streaming-note">
                 <p><strong>🌊 Streaming Mode:</strong> Currently under development. Coming soon for real-time
