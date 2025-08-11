@@ -102,7 +102,13 @@
         }
 
         .btn.streaming {
-            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+
+        .btn.paused {
+            background: linear-gradient(135deg, #ffa726 0%, #ff9800 100%);
+            color: white;
             animation: pulse 2s infinite;
         }
 
@@ -217,6 +223,80 @@
             color: #495057;
         }
 
+        .instructions {
+            padding: 25px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+
+        .instructions h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.3em;
+        }
+
+        .instruction-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 15px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .step-text {
+            color: #495057;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+
+        .step-text strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .streaming-note {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .streaming-note p {
+            color: #856404;
+            margin: 0;
+            font-size: 0.9em;
+        }
+
+        .streaming-note strong {
+            color: #856404;
+        }
+
         .footer {
             padding: 20px;
             text-align: center;
@@ -257,6 +337,20 @@
             .message {
                 max-width: 90%;
             }
+
+            .instructions {
+                padding: 20px;
+            }
+
+            .step {
+                flex-direction: column;
+                text-align: center;
+                gap: 10px;
+            }
+
+            .step-text {
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -264,25 +358,57 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎙️ EchoAI</h1>
+            <h1>🎙️ Ateet AI Clone</h1>
             <p>Chat with My AI Clone - Real-time Voice Assistant</p>
         </div>
 
         <div class="controls">
-            <button id="connectBtn" class="btn btn-primary">Connect</button>
-            <button id="recordBtn" class="btn btn-secondary" disabled>🎤 Start Recording</button>
-            <button id="streamBtn" class="btn btn-secondary" disabled>🌊 Start Streaming</button>
-            <button id="clearBtn" class="btn btn-secondary" disabled>🗑️ Clear Chat</button>
+            <button id="connectBtn" class="btn btn-primary">🔌 Connect</button>
+            <button id="recordBtn" class="btn btn-secondary">🎤 Start Recording</button>
+            <button id="streamBtn" class="btn btn-secondary" style="display: none;">🌊 Start Streaming</button>
+            <button id="pauseResumeBtn" class="btn btn-secondary" style="display: none;">⏸️ Pause</button>
+            <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
         </div>
 
         <div id="status" class="status disconnected">
             <span id="statusText">Disconnected</span>
         </div>
 
+        <!-- Add instructions section -->
+        <div class="instructions">
+            <h3>📋 How to Use</h3>
+            <div class="instruction-steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <span class="step-text">Click <strong>🔌 Connect</strong> to connect to the AI server</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <span class="step-text">Click <strong>🎤 Start Recording</strong> to begin recording your
+                        voice</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <span class="step-text">Speak your message clearly into the microphone</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <span class="step-text">Click <strong>⏹️ Stop Recording</strong> when you're done speaking</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">5</span>
+                    <span class="step-text">Wait for the AI to process and respond with voice</span>
+                </div>
+            </div>
+            <div class="streaming-note">
+                <p><strong>🌊 Streaming Mode:</strong> Currently under development. Coming soon for real-time
+                    conversations!</p>
+            </div>
+        </div>
+
         <div id="conversation" class="conversation">
             <div class="message ai">
-                <strong>AI Assistant:</strong> Welcome to EchoAI! Connect to start chatting with your AI clone. You can
-                use either traditional recording or real-time streaming for the best experience.
+                <strong>Ateet AI Clone:</strong>Ateet's AI Clone is online. Connect now to talk with me.
                 <small>Just now</small>
             </div>
         </div>
@@ -301,7 +427,7 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 
 </html>
