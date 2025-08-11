@@ -15,7 +15,7 @@ import random
 
 from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
-from src.utils.audio import stream_processor
+from src.utils.audio import audio_stream_processor
 from src.db import DBOperations
 
 logger = get_logger(__name__)
@@ -289,7 +289,7 @@ class TTSService:
                     continue
                 
                 # Create audio chunks using AudioStreamProcessor
-                audio_chunks = stream_processor.create_audio_chunks(result["audio_data"], chunk_size=1024)
+                audio_chunks = audio_stream_processor.create_audio_chunks(result["audio_data"], chunk_size=1024)
                 
                 for chunk in audio_chunks:
                     yield chunk

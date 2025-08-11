@@ -10,4 +10,4 @@ from .audio_stream_processor import AudioStreamProcessor
 
 # Global instances
 audio_processor = AudioProcessor()
-stream_processor = AudioStreamProcessor() 
+audio_stream_processor = AudioStreamProcessor() 

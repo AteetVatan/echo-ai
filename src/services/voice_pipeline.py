@@ -16,7 +16,7 @@ from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
 from src.services.langchain_rag_agent import rag_agent
-from src.utils.audio import audio_processor, stream_processor
+from src.utils.audio import audio_processor, audio_stream_processor
 from src.utils import get_logger, log_performance, log_error_with_context
 
 
@@ -470,7 +470,7 @@ class VoicePipeline:
             
             # Collect audio chunks from stream
             audio_chunks = []
-            async for chunk in stream_processor.process_audio_stream(audio_stream):
+            async for chunk in audio_stream_processor.process_audio_stream(audio_stream):
                 audio_chunks.append(chunk)
                 
                 # Process chunks in batches for optimal performance
@@ -615,13 +615,10 @@ class VoicePipeline:
     async def _process_audio_chunks(self, audio_chunks: List[bytes]) -> bytes:
         """Combine and process streaming audio chunks for STT."""
         try:
-            # Combine all chunks into a single audio stream
-            combined_audio = b''.join(audio_chunks)
-            
             # Process the combined audio for STT compatibility
-            processed_audio = await audio_processor.process_audio_for_stt(combined_audio, "webm")
+            processed_audio = await audio_processor.process_audio_chunks_for_stt(audio_chunks, "webm")
             
-            logger.debug(f"Combined {len(audio_chunks)} chunks into {len(combined_audio)} bytes, "
+            logger.debug(f"Combined {len(audio_chunks)} chunks into {len(processed_audio)} bytes, "
                         f"processed to {len(processed_audio)} bytes")
             
             return processed_audio
