@@ -142,3 +142,4 @@ audio_cache/*.wav
 # OS files
 .DS_Store
 Thumbs.db
+rag_persona_db/document/CV_AI_Clone.docx
