@@ -19,7 +19,7 @@ import torch
 import numpy as np
 from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
-from src.utils.audio import audio_processor, stream_processor
+from src.utils.audio import audio_processor, audio_stream_processor
 
 
 logger = get_logger(__name__)
@@ -255,7 +255,7 @@ class STTService:
             optimized_chunks = []
             for chunk in audio_chunks:
                 # Create optimal chunks using AudioStreamProcessor
-                chunk_generator = stream_processor.create_audio_chunks(chunk, chunk_size=1024)
+                chunk_generator = audio_stream_processor.create_audio_chunks(chunk, chunk_size=1024)
                 optimized_chunk = b''.join(chunk_generator)
                 optimized_chunks.append(optimized_chunk)
             
@@ -293,7 +293,7 @@ class STTService:
             
             # Use AudioStreamProcessor to handle the stream
             audio_chunks = []
-            async for chunk in stream_processor.process_audio_stream(audio_stream):
+            async for chunk in audio_stream_processor.process_audio_stream(audio_stream):
                 audio_chunks.append(chunk)
                 
                 # Process in batches for optimal performance
