@@ -52,7 +52,7 @@ def start_backend():
     """Start the FastAPI backend server."""
     print("Starting FastAPI backend...")
     
-    # Set development environment variables
+    # Set development environment variables set them in env
     os.environ["DEBUG"] = "True"
     os.environ["LOG_LEVEL"] = "DEBUG"
     
