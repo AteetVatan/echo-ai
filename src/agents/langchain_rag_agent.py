@@ -601,6 +601,7 @@ class ReplyCacheManager:
                     similarity_score=1.0
                 )
             
+            return None # TODO: For now disabeling this feature need to be tested.
             # Semantic search using vector store
             try:
                 docs = self.vector_store.similarity_search_with_score(user_text, k=3)
