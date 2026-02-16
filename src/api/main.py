@@ -26,6 +26,7 @@ from src.utils import get_settings, validate_api_keys
 from src.utils import setup_logging, get_logger
 from src.utils.audio import audio_stream_processor
 from src.api.connection_manager import ConnectionManager
+from src.constants import WSMessageType, AUDIO_CHUNK_MAX_BYTES, AUDIO_BUFFER_MAX_BYTES
 
 
 # Setup logging
@@ -205,7 +206,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
         
         # Send welcome message
         await manager.send_message(session_id, {
-            "type": "connection",
+            "type": WSMessageType.CONNECTION,
             "session_id": session_id,
             "message": "Connected to EchoAI Voice Chat",
             "features": ["streaming_audio", "real_time_processing"]
@@ -224,29 +225,29 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 message_type = message.get("type")
                 logger.info(f"message_type: {message_type}")
                 
-                if message_type == "audio":
+                if message_type == WSMessageType.AUDIO:
                     #Full audio file is sent in one message.
                     await handle_audio_message(session_id, message)
-                elif message_type == "audio_chunk":
+                elif message_type == WSMessageType.AUDIO_CHUNK:
                     #Streaming audio chunks
                     await handle_audio_chunk_message(session_id, message)
-                elif message_type == "start_streaming":
+                elif message_type == WSMessageType.START_STREAMING:
                     # real-time audio stream.
                     await handle_start_streaming(session_id, message)
-                elif message_type == "stop_streaming":
+                elif message_type == WSMessageType.STOP_STREAMING:
                     # real-time audio stream.
                     await handle_stop_streaming(session_id, message)
-                elif message_type == "text":
+                elif message_type == WSMessageType.TEXT:
                     await handle_text_message(session_id, message)
-                elif message_type == "ping":
+                elif message_type == WSMessageType.PING:
                     #Health check 
-                    await manager.send_message(session_id, {"type": "pong"})
-                elif message_type == "streaming_buffer":
+                    await manager.send_message(session_id, {"type": WSMessageType.PONG})
+                elif message_type == WSMessageType.STREAMING_BUFFER:
                     # Process streaming buffer in real-time
                     await handle_streaming_buffer(session_id, message)
                 else:
                     await manager.send_message(session_id, {
-                        "type": "error",
+                        "type": WSMessageType.ERROR,
                         "message": f"Unknown message type: {message_type}"
                     })
                     
@@ -255,13 +256,13 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 break
             except json.JSONDecodeError:
                 await manager.send_message(session_id, {
-                    "type": "error",
+                    "type": WSMessageType.ERROR,
                     "message": "Invalid JSON format"
                 })
             except Exception as e:
                 logger.error(f"Error processing message: {str(e)}")
                 await manager.send_message(session_id, {
-                    "type": "error",
+                    "type": WSMessageType.ERROR,
                     "message": f"Processing error: {str(e)}"
                 })
                 
@@ -278,7 +279,7 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         audio_data_b64 = message.get("audio")
         if not audio_data_b64:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "No audio data provided"
             })
             return
@@ -288,7 +289,7 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         
         # Send processing status
         await manager.send_message(session_id, {
-            "type": "processing",
+            "type": WSMessageType.PROCESSING,
             "message": "Processing your voice input..."
         })
         
@@ -298,7 +299,7 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         # Check for errors
         if result.error:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": result.error
             })
             return
@@ -308,7 +309,7 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         
         # Send response
         await manager.send_message(session_id, {
-            "type": "response",
+            "type": WSMessageType.RESPONSE,
             "transcription": result.transcription,
             "response_text": result.response_text,
             "audio": response_audio_b64,
@@ -327,7 +328,7 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to process audio for session {session_id}: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to process audio: {str(e)}"
         })
 
@@ -338,7 +339,7 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         # Check if session is in streaming mode
         if not manager.streaming_sessions.get(session_id, False):
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "Not in streaming mode. Send 'start_streaming' first."
             })
             return
@@ -347,7 +348,7 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         audio_chunk_b64 = message.get("audio_chunk")
         if not audio_chunk_b64:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "No audio chunk data provided"
             })
             return
@@ -357,15 +358,15 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
             audio_chunk = base64.b64decode(audio_chunk_b64)
         except Exception as e:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": f"Invalid base64 audio data: {str(e)}"
             })
             return
         
         # Validate chunk size (prevent memory abuse)
-        if len(audio_chunk) > 1024 * 1024:  # 1MB limit per chunk
+        if len(audio_chunk) > AUDIO_CHUNK_MAX_BYTES:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "Audio chunk too large (max 1MB per chunk)"
             })
             return
@@ -373,10 +374,9 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         # Check total buffer size (prevent memory overflow)
         current_buffer = manager.get_audio_buffer(session_id)
         total_size = sum(len(chunk) for chunk in current_buffer) + len(audio_chunk)
-        if total_size > 10 * 1024 * 1024:  # 10MB total buffer limit
-            #should we disable it?
+        if total_size > AUDIO_BUFFER_MAX_BYTES:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "Audio buffer full (max 10MB total). Stop streaming to process."
             })
             return
@@ -386,7 +386,7 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         
         # Send acknowledgment
         await manager.send_message(session_id, {
-            "type": "chunk_received",
+            "type": WSMessageType.CHUNK_RECEIVED,
             "chunk_size": len(audio_chunk),
             "buffer_size": len(manager.get_audio_buffer(session_id)),
             "total_bytes": total_size + len(audio_chunk)
@@ -397,7 +397,7 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to process audio chunk for session {session_id}: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to process audio chunk: {str(e)}"
         })
 
@@ -412,7 +412,7 @@ async def handle_start_streaming(session_id: str, message: Dict[str, Any]):
         manager.clear_audio_buffer(session_id)
         
         await manager.send_message(session_id, {
-            "type": "streaming_started",
+            "type": WSMessageType.STREAMING_STARTED,
             "message": "Audio streaming started"
         })
         
@@ -421,7 +421,7 @@ async def handle_start_streaming(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to start streaming for session {session_id}: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to start streaming: {str(e)}"
         })
 
@@ -432,7 +432,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         # Check if session was actually streaming
         if not manager.streaming_sessions.get(session_id, False):
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "Not in streaming mode. No audio to process."
             })
             return
@@ -445,7 +445,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         
         if not audio_chunks:
             await manager.send_message(session_id, {
-                "type": "streaming_stopped",
+                "type": WSMessageType.STREAMING_STOPPED,
                 "message": "Streaming stopped, but no audio data was received",
                 "chunks_count": 0
             })
@@ -456,7 +456,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         
         # Send processing status
         await manager.send_message(session_id, {
-            "type": "processing",
+            "type": WSMessageType.PROCESSING,
             "message": "Processing streaming audio...",
             "chunks_count": len(audio_chunks),
             "total_audio_bytes": total_audio_size
@@ -467,7 +467,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         
         if result.error:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": result.error
             })
             # Clear buffer even on error to prevent memory leak
@@ -479,7 +479,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
         
         # Send response with enhanced metadata
         await manager.send_message(session_id, {
-            "type": "streaming_response",
+            "type": WSMessageType.STREAMING_RESPONSE,
             "transcription": result.transcription,
             "response_text": result.response_text,
             "audio": response_audio_b64,
@@ -512,7 +512,7 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to process streaming audio for session {session_id}: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to process streaming audio: {str(e)}"
         })
         # Clear buffer on error to prevent memory leak
@@ -525,14 +525,14 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         text = message.get("text", "").strip()
         if not text:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "No text provided"
             })
             return
         
         # Send processing status
         await manager.send_message(session_id, {
-            "type": "processing",
+            "type": WSMessageType.PROCESSING,
             "message": "Generating response..."
         })
         
@@ -542,7 +542,7 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         # Check for errors
         if result.error:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": result.error
             })
             return
@@ -552,7 +552,7 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         
         # Send response
         await manager.send_message(session_id, {
-            "type": "text_response",
+            "type": WSMessageType.TEXT_RESPONSE,
             "response_text": result.response_text,
             "audio": response_audio_b64,
             "latency": {
@@ -567,7 +567,7 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to process text for session {session_id}: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to process text: {str(e)}"
         })
 
@@ -579,7 +579,7 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         audio_b64 = message.get("audio")
         if not audio_b64:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": "No audio data provided"
             })
             return
@@ -592,7 +592,7 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         
         if result.error:
             await manager.send_message(session_id, {
-                "type": "error",
+                "type": WSMessageType.ERROR,
                 "message": result.error
             })
             return
@@ -601,7 +601,7 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         response_audio_b64 = base64.b64encode(result.audio_data).decode()
         
         await manager.send_message(session_id, {
-            "type": "streaming_response",
+            "type": WSMessageType.STREAMING_RESPONSE,
             "transcription": result.transcription,
             "response_text": result.response_text,
             "audio": response_audio_b64,
@@ -613,7 +613,7 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to process streaming buffer: {str(e)}")
         await manager.send_message(session_id, {
-            "type": "error",
+            "type": WSMessageType.ERROR,
             "message": f"Failed to process streaming buffer: {str(e)}"
         })
 
@@ -625,24 +625,22 @@ def free_port(port):
     """
     try:
         if platform.system() == "Windows":
-            # Find PID
             result = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode()
             for line in result.strip().split("\n"):
                 if f":{port}" in line and "LISTENING" in line:
                     pid = int(line.strip().split()[-1])
-                    print(f"Port {port} in use by PID {pid}, killing...")
+                    logger.info(f"Port {port} in use by PID {pid}, killing...")
                     subprocess.call(f"taskkill /PID {pid} /F", shell=True)
-                    print(f"Port {port} freed")
+                    logger.info(f"Port {port} freed")
         else:
-            # macOS / Linux
             result = subprocess.check_output(f"lsof -t -i:{port}", shell=True).decode().strip().split("\n")
             for pid in result:
                 if pid.strip():
-                    print(f"Port {port} in use by PID {pid}, killing...")
+                    logger.info(f"Port {port} in use by PID {pid}, killing...")
                     os.system(f"kill -9 {pid}")
-                    print(f"Port {port} freed")
+                    logger.info(f"Port {port} freed")
     except subprocess.CalledProcessError:
-        print(f"Port {port} is already free")
+        logger.debug(f"Port {port} is already free")
 
 
 def run_server():

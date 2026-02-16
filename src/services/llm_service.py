@@ -16,6 +16,8 @@ from mistralai.models.chat_completion import ChatMessage
 
 from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
+from src.constants import ModelName, ChatRole, LATENCY_WINDOW_SIZE, MAX_CONVERSATION_HISTORY, LLM_RESPONSE_MAX_LENGTH
+from src.exceptions import LLMError
 
 
 logger = get_logger(__name__)
@@ -41,7 +43,7 @@ class LLMService:
         
         # Conversation history
         self.conversation_history: List[Dict[str, str]] = []
-        self.max_history_length = 10
+        self.max_history_length = MAX_CONVERSATION_HISTORY
         
         # Performance tracking
         self.performance_stats = {
@@ -99,15 +101,15 @@ class LLMService:
         for message in self.conversation_history:
             role = message["role"]
             content = message["content"]
-            if role == "user":
+            if role == ChatRole.USER:
                 context_parts.append(f"User: {content}")
-            elif role == "assistant":
+            elif role == ChatRole.ASSISTANT:
                 context_parts.append(f"Assistant: {content}")
         
         return "\n".join(context_parts)
     
     @log_performance
-    async def generate_response(self, user_input: str, use_fallback: bool = False) -> Dict[str, Any]:
+    async def generate_response(self, user_input: str, *, use_fallback: bool = False) -> Dict[str, Any]:
         """
         Generate response using primary or fallback LLM service.
         
@@ -159,7 +161,7 @@ class LLMService:
         
         try:
             if not self.mistral_client:
-                raise Exception("Mistral client not initialized")
+                raise LLMError("Mistral client not initialized")
             
             # Build messages with conversation history
             messages = []
@@ -173,7 +175,7 @@ class LLMService:
             
             # Add current user input
             messages.append(ChatMessage(
-                role="user",
+                role=ChatRole.USER,
                 content=user_input
             ))
             
@@ -194,7 +196,7 @@ class LLMService:
             
             return {
                 "text": cleaned_response,
-                "model": "mistral_ai",
+                "model": ModelName.MISTRAL_AI,
                 "latency": latency,
                 "tokens_used": response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 0
             }
@@ -210,7 +212,7 @@ class LLMService:
         
         try:
             if not self.openai_client:
-                raise Exception("OpenAI client not initialized")
+                raise LLMError("OpenAI client not initialized")
             
             # Build messages with conversation history
             messages = []
@@ -224,7 +226,7 @@ class LLMService:
             
             # Add current user input
             messages.append({
-                "role": "user",
+                "role": ChatRole.USER,
                 "content": user_input
             })
             
@@ -245,7 +247,7 @@ class LLMService:
             
             return {
                 "text": cleaned_response,
-                "model": "openai_gpt4o_mini",
+                "model": ModelName.OPENAI_GPT4O_MINI,
                 "latency": latency,
                 "tokens_used": response.usage.total_tokens
             }
@@ -268,8 +270,8 @@ class LLMService:
             response = response.split("Assistant:", 1)[1].strip()
         
         # Limit response length
-        if len(response) > 1000:
-            response = response[:1000] + "..."
+        if len(response) > LLM_RESPONSE_MAX_LENGTH:
+            response = response[:LLM_RESPONSE_MAX_LENGTH] + "..."
         
         return response
     
@@ -288,8 +290,8 @@ class LLMService:
             self.performance_stats["failed_requests"] += 1
         
         # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > 100:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
         
         # Update average latency
         if self.performance_stats["latencies"]:
@@ -303,8 +305,8 @@ class LLMService:
             "failed_requests": self.performance_stats["failed_requests"],
             "avg_latency": self.performance_stats["avg_latency"],
             "models_warmed_up": self.models_warmed_up,
-            "primary_model": "mistral_ai" if self.mistral_client else "none",
-            "fallback_model": "openai_gpt4o_mini" if self.openai_client else "none",
+            "primary_model": ModelName.MISTRAL_AI if self.mistral_client else ModelName.NONE,
+            "fallback_model": ModelName.OPENAI_GPT4O_MINI if self.openai_client else ModelName.NONE,
             "conversation_length": len(self.conversation_history)
         }
 

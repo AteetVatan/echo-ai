@@ -14,6 +14,7 @@ from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
 from src.utils.audio import audio_stream_processor
 from src.db import DBOperations
+from src.constants import ModelName, LATENCY_WINDOW_SIZE, IN_MEMORY_CACHE_MAX_SIZE, IN_MEMORY_CACHE_EVICT_COUNT
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -97,14 +98,13 @@ class TTSService:
         self.cache[cache_key] = audio_data
         
         # Limit cache size
-        if len(self.cache) > 1000:
-            # Remove oldest entries
-            oldest_keys = list(self.cache.keys())[:100]
+        if len(self.cache) > IN_MEMORY_CACHE_MAX_SIZE:
+            oldest_keys = list(self.cache.keys())[:IN_MEMORY_CACHE_EVICT_COUNT]
             for key in oldest_keys:
                 del self.cache[key]
     
     @log_performance
-    async def synthesize_speech(self, text: str, use_streaming: bool = True, voice: str = None) -> Dict[str, Any]:
+    async def synthesize_speech(self, text: str, *, use_streaming: bool = True, voice: str = None) -> Dict[str, Any]:
         """
         Synthesize speech from text using Edge-TTS.
         
@@ -130,7 +130,7 @@ class TTSService:
                 
                 return {
                     "audio_data": cached_audio,
-                    "model": "edge_tts_cached",
+                    "model": ModelName.EDGE_TTS_CACHED,
                     "latency": latency,
                     "cached": True
                 }
@@ -182,7 +182,7 @@ class TTSService:
             
             return {
                 "audio_data": audio_data,
-                "model": "edge_tts",
+                "model": ModelName.EDGE_TTS,
                 "latency": latency,
                 "cached": False
             }
@@ -283,8 +283,8 @@ class TTSService:
             self.performance_stats["failed_syntheses"] += 1
         
         # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > 100:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
         
         # Update average latency
         if self.performance_stats["latencies"]:

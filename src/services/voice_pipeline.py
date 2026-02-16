@@ -18,6 +18,7 @@ from src.services.tts_service import tts_service
 from src.agents.langchain_rag_agent import rag_agent
 from src.utils.audio import audio_processor, audio_stream_processor
 from src.utils import get_logger, log_performance, log_error_with_context
+from src.constants import ModelName, PipelineSource, LATENCY_WINDOW_SIZE, STREAM_PROCESSING_BATCH_SIZE
 
 
 logger = get_logger(__name__)
@@ -42,7 +43,7 @@ class PipelineResult:
     semantic_cache_hit: bool = False
     similarity_score: float = 0.0
     rag_used: bool = False
-    source: str = "pipeline"
+    source: str = PipelineSource.PIPELINE
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
@@ -201,8 +202,8 @@ class VoicePipeline:
                 result.response_text = rag_result["response_text"]
                 result.semantic_cache_hit = rag_result.get("cached", False)
                 result.similarity_score = rag_result.get("similarity_score", 0.0)
-                result.rag_used = rag_result.get("source") == "agent"
-                result.source = rag_result.get("source", "pipeline")
+                result.rag_used = rag_result.get("source") == PipelineSource.AGENT
+                result.source = rag_result.get("source", PipelineSource.PIPELINE)
                 
                 # If we got a cached audio file, load it and return early
                 if result.semantic_cache_hit and "audio_file_path" in rag_result:
@@ -268,9 +269,9 @@ class VoicePipeline:
             # Compile final results
             result.pipeline_latency = time.time() - pipeline_start
             result.models_used = {
-                "stt": stt_result.get("model", "unknown"),
-                "rag": "langchain_rag_agent",
-                "tts": tts_result.get("model", "unknown")
+                "stt": stt_result.get("model", ModelName.UNKNOWN),
+                "rag": ModelName.LANGCHAIN_RAG,
+                "tts": tts_result.get("model", ModelName.UNKNOWN)
             }
             
             self._update_stats(result.pipeline_latency, True)
@@ -357,8 +358,8 @@ class VoicePipeline:
                 result.response_text = rag_result["response_text"]
                 result.semantic_cache_hit = rag_result.get("cached", False)
                 result.similarity_score = rag_result.get("similarity_score", 0.0)
-                result.rag_used = rag_result.get("source") == "agent"
-                result.source = rag_result.get("source", "pipeline")
+                result.rag_used = rag_result.get("source") == PipelineSource.AGENT
+                result.source = rag_result.get("source", PipelineSource.PIPELINE)
                 
                 # If we got a cached audio file, load it and return early
                 if result.semantic_cache_hit and "audio_file_path" in rag_result:
@@ -424,9 +425,9 @@ class VoicePipeline:
             # Finalize results
             result.pipeline_latency = time.time() - pipeline_start
             result.models_used = {
-                "stt": stt_result.get("model", "unknown"),
-                "rag": "agno_agent",
-                "tts": tts_result.get("model", "unknown")
+                "stt": stt_result.get("model", ModelName.UNKNOWN),
+                "rag": ModelName.AGNO_AGENT,
+                "tts": tts_result.get("model", ModelName.UNKNOWN)
             }
             
             self._update_stats(result.pipeline_latency, True)
@@ -474,7 +475,7 @@ class VoicePipeline:
                 audio_chunks.append(chunk)
                 
                 # Process chunks in batches for optimal performance
-                if len(audio_chunks) >= 10:  # Process every 10 chunks
+                if len(audio_chunks) >= STREAM_PROCESSING_BATCH_SIZE:
                     break
             
             if not audio_chunks:
@@ -529,8 +530,8 @@ class VoicePipeline:
                 result.response_text = rag_result["response_text"]
                 result.semantic_cache_hit = rag_result.get("cached", False)
                 result.similarity_score = rag_result.get("similarity_score", 0.0)
-                result.rag_used = rag_result.get("source") == "agent"
-                result.source = rag_result.get("source", "pipeline")
+                result.rag_used = rag_result.get("source") == PipelineSource.AGENT
+                result.source = rag_result.get("source", PipelineSource.PIPELINE)
                 
                 # If we got a cached audio file, load it and return early
                 if result.semantic_cache_hit and "audio_file_path" in rag_result:
@@ -596,8 +597,8 @@ class VoicePipeline:
             # Finalize results
             result.pipeline_latency = time.time() - pipeline_start
             result.models_used = {
-                "rag": "agno_agent",
-                "tts": tts_result.get("model", "unknown")
+                "rag": ModelName.AGNO_AGENT,
+                "tts": tts_result.get("model", ModelName.UNKNOWN)
             }
             
             self._update_stats(result.pipeline_latency, True)
@@ -640,8 +641,8 @@ class VoicePipeline:
             self.performance_stats["failed_requests"] += 1
         
         # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > 100:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
         
         # Update average latency
         if self.performance_stats["latencies"]:

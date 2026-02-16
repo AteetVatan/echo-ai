@@ -15,13 +15,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # API Keys
-    #HUGGINGFACE_API_KEY: str = Field(..., env="HUGGINGFACE_API_KEY")
     OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
     MISTRAL_API_KEY: str = Field(..., env="MISTRAL_API_KEY")
     
-    # Model Configuration
-    #DEFAULT_STT_MODEL: str = Field("openai/whisper-large-v3", env="DEFAULT_STT_MODEL")
     FALLBACK_STT_MODEL: str = Field("openai/whisper-1", env="FALLBACK_STT_MODEL")
     MISTRAL_MODEL: str = Field("mistral-small", env="MISTRAL_MODEL")
     OPENAI_MODEL: str = Field("gpt-4o-mini", env="OPENAI_MODEL")
