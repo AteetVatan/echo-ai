@@ -54,6 +54,7 @@ class PipelineSource(str, Enum):
 # ---------------------------------------------------------------------------
 
 class ModelName(str, Enum):
+    DEEPSEEK_AI = "deepseek_ai"
     MISTRAL_AI = "mistral_ai"
     OPENAI_GPT4O_MINI = "openai_gpt4o_mini"
     EDGE_TTS = "edge_tts"

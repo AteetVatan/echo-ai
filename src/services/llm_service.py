@@ -1,8 +1,8 @@
 """
 Language Model service for EchoAI voice chat system.
 
-This module provides LLM functionality using Mistral AI API as primary
-and GPT-4o-mini (OpenAI) as fallback for generating conversational responses.
+This module provides LLM functionality using DeepSeek AI API as primary
+and Mistral AI as fallback for generating conversational responses.
 """
 
 import asyncio
@@ -28,17 +28,22 @@ class LLMService:
     """Language Model service with fallback support."""
     
     def __init__(self):
+        # DeepSeek (primary)
+        self.deepseek_api_key = settings.DEEPSEEK_API_KEY
+        self.deepseek_api_base = settings.DEEPSEEK_API_BASE
+        self.deepseek_model = settings.DEEPSEEK_MODEL
+        
+        # Mistral (fallback)
         self.mistral_api_key = settings.MISTRAL_API_KEY
         self.mistral_api_base = settings.MISTRAL_API_BASE
         self.mistral_model = settings.MISTRAL_MODEL
-        self.openai_api_key = settings.OPENAI_API_KEY
-        self.openai_model = settings.OPENAI_MODEL
+        
         self.temperature = settings.LLM_TEMPERATURE
         self.timeout = settings.LLM_TIMEOUT
         
         # Model instances
+        self.deepseek_client = None
         self.mistral_client = None
-        self.openai_client = None
         self.models_warmed_up = False
         
         # Conversation history
@@ -59,7 +64,18 @@ class LLMService:
         try:
             logger.info("Warming up LLM models...")
             
-            # Warm up Mistral client
+            # Warm up DeepSeek client (primary)
+            if self.deepseek_api_key:
+                try:
+                    self.deepseek_client = openai.AsyncOpenAI(
+                        api_key=self.deepseek_api_key,
+                        base_url=self.deepseek_api_base
+                    )
+                    logger.info(f"DeepSeek client initialized with model {self.deepseek_model}")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize DeepSeek client: {str(e)}")
+            
+            # Warm up Mistral client (fallback)
             if self.mistral_api_key:
                 try:
                     self.mistral_client = MistralClient(
@@ -69,14 +85,6 @@ class LLMService:
                     logger.info(f"Mistral client initialized with model {self.mistral_model}")
                 except Exception as e:
                     logger.warning(f"Failed to initialize Mistral client: {str(e)}")
-            
-            # Warm up OpenAI client
-            if self.openai_api_key:
-                try:
-                    self.openai_client = openai.AsyncOpenAI(api_key=self.openai_api_key)
-                    logger.info("OpenAI client initialized")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize OpenAI client: {str(e)}")
             
             self.models_warmed_up = True
             logger.info("LLM models warmed up successfully")
@@ -125,23 +133,23 @@ class LLMService:
         try:
             self.performance_stats["total_requests"] += 1
             
-            # Try primary service first (unless fallback is explicitly requested)
-            if not use_fallback and self.mistral_client:
+            # Try primary service first (DeepSeek, unless fallback is explicitly requested)
+            if not use_fallback and self.deepseek_client:
+                try:
+                    result = await self._generate_with_deepseek(user_input)
+                    self._update_stats(result["latency"], True)
+                    return result
+                except Exception as e:
+                    logger.warning(f"Primary LLM (DeepSeek) failed, trying fallback (Mistral): {str(e)}")
+            
+            # Use fallback service (Mistral)
+            if self.mistral_client:
                 try:
                     result = await self._generate_with_mistral(user_input)
                     self._update_stats(result["latency"], True)
                     return result
                 except Exception as e:
-                    logger.warning(f"Primary LLM failed, trying fallback: {str(e)}")
-            
-            # Use fallback service
-            if self.openai_client:
-                try:
-                    result = await self._generate_with_openai(user_input)
-                    self._update_stats(result["latency"], True)
-                    return result
-                except Exception as e:
-                    logger.error(f"Fallback LLM also failed: {str(e)}")
+                    logger.error(f"Fallback LLM (Mistral) also failed: {str(e)}")
                     self._update_stats(time.time() - start_time, False)
                     return {"error": f"LLM failed: {str(e)}"}
             else:
@@ -155,8 +163,58 @@ class LLMService:
             log_error_with_context(logger, e, {"method": "generate_response", "input_length": len(user_input)})
             return {"error": f"Response generation failed: {str(e)}"}
     
+    async def _generate_with_deepseek(self, user_input: str) -> Dict[str, Any]:
+        """Generate response using DeepSeek AI API (OpenAI-compatible)."""
+        start_time = time.time()
+        
+        try:
+            if not self.deepseek_client:
+                raise LLMError("DeepSeek client not initialized")
+            
+            # Build messages with conversation history
+            messages = []
+            
+            # Add conversation history
+            for msg in self.conversation_history:
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+            
+            # Add current user input
+            messages.append({
+                "role": ChatRole.USER,
+                "content": user_input
+            })
+            
+            # Generate response
+            response = await self.deepseek_client.chat.completions.create(
+                model=self.deepseek_model,
+                messages=messages,
+                temperature=self.temperature,
+            )
+            
+            assistant_response = response.choices[0].message.content.strip()
+            cleaned_response = self._clean_response(assistant_response)
+            
+            latency = time.time() - start_time
+            
+            logger.debug(f"DeepSeek generation completed in {latency:.3f}s")
+            
+            return {
+                "text": cleaned_response,
+                "model": ModelName.DEEPSEEK_AI,
+                "latency": latency,
+                "tokens_used": response.usage.total_tokens
+            }
+            
+        except Exception as e:
+            latency = time.time() - start_time
+            log_error_with_context(logger, e, {"method": "_generate_with_deepseek", "latency": latency})
+            raise
+    
     async def _generate_with_mistral(self, user_input: str) -> Dict[str, Any]:
-        """Generate response using Mistral AI API."""
+        """Generate response using Mistral AI API (fallback)."""
         start_time = time.time()
         
         try:
@@ -179,12 +237,12 @@ class LLMService:
                 content=user_input
             ))
             
-            # Generate response
-            response = self.mistral_client.chat(
-                model=self.mistral_model, #mistral-small
+            # Generate response — Mistral SDK is synchronous, wrap to avoid blocking
+            response = await asyncio.to_thread(
+                self.mistral_client.chat,
+                model=self.mistral_model,
                 messages=messages,
                 temperature=self.temperature,
-                #max_tokens=500
             )
             
             assistant_response = response.choices[0].message.content.strip()
@@ -204,57 +262,6 @@ class LLMService:
         except Exception as e:
             latency = time.time() - start_time
             log_error_with_context(logger, e, {"method": "_generate_with_mistral", "latency": latency})
-            raise
-    
-    async def _generate_with_openai(self, user_input: str) -> Dict[str, Any]:
-        """Generate response using OpenAI model."""
-        start_time = time.time()
-        
-        try:
-            if not self.openai_client:
-                raise LLMError("OpenAI client not initialized")
-            
-            # Build messages with conversation history
-            messages = []
-            
-            # Add conversation history
-            for msg in self.conversation_history:
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-            
-            # Add current user input
-            messages.append({
-                "role": ChatRole.USER,
-                "content": user_input
-            })
-            
-            # Generate response
-            response = await self.openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=messages,
-                temperature=self.temperature,
-                #max_tokens=500
-            )
-            
-            assistant_response = response.choices[0].message.content.strip()
-            cleaned_response = self._clean_response(assistant_response)
-            
-            latency = time.time() - start_time
-            
-            logger.debug(f"OpenAI generation completed in {latency:.3f}s")
-            
-            return {
-                "text": cleaned_response,
-                "model": ModelName.OPENAI_GPT4O_MINI,
-                "latency": latency,
-                "tokens_used": response.usage.total_tokens
-            }
-            
-        except Exception as e:
-            latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_generate_with_openai", "latency": latency})
             raise
     
     def _clean_response(self, response: str) -> str:
@@ -305,11 +312,11 @@ class LLMService:
             "failed_requests": self.performance_stats["failed_requests"],
             "avg_latency": self.performance_stats["avg_latency"],
             "models_warmed_up": self.models_warmed_up,
-            "primary_model": ModelName.MISTRAL_AI if self.mistral_client else ModelName.NONE,
-            "fallback_model": ModelName.OPENAI_GPT4O_MINI if self.openai_client else ModelName.NONE,
+            "primary_model": ModelName.DEEPSEEK_AI if self.deepseek_client else ModelName.NONE,
+            "fallback_model": ModelName.MISTRAL_AI if self.mistral_client else ModelName.NONE,
             "conversation_length": len(self.conversation_history)
         }
 
 
 # Global service instance
-llm_service = LLMService() 
+llm_service = LLMService()

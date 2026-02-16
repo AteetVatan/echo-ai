@@ -15,15 +15,20 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
+    DEEPSEEK_API_KEY: str = Field(..., env="DEEPSEEK_API_KEY")
     OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
     MISTRAL_API_KEY: str = Field(..., env="MISTRAL_API_KEY")
     
     FALLBACK_STT_MODEL: str = Field("openai/whisper-1", env="FALLBACK_STT_MODEL")
+    DEEPSEEK_MODEL: str = Field("deepseek-chat", env="DEEPSEEK_MODEL")
     MISTRAL_MODEL: str = Field("mistral-small", env="MISTRAL_MODEL")
     OPENAI_MODEL: str = Field("gpt-4o-mini", env="OPENAI_MODEL")
    
     
-    # Mistral Configuration
+    # DeepSeek Configuration (Primary LLM)
+    DEEPSEEK_API_BASE: str = Field("https://api.deepseek.com", env="DEEPSEEK_API_BASE")
+    
+    # Mistral Configuration (Fallback LLM)
     MISTRAL_API_BASE: str = Field("https://api.mistral.ai", env="MISTRAL_API_BASE")
     
     # Edge-TTS Configuration
@@ -80,6 +85,7 @@ def validate_api_keys() -> bool:
         bool: True if all keys are present, False otherwise
     """
     required_keys = [        
+        settings.DEEPSEEK_API_KEY,
         settings.OPENAI_API_KEY,
         settings.MISTRAL_API_KEY
     ]
@@ -87,5 +93,5 @@ def validate_api_keys() -> bool:
     return all(key and key != "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
                and key != "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                and key != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-               and key != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+               and key != "your-deepseek-api-key-here"
                for key in required_keys) 

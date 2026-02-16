@@ -8,10 +8,246 @@
       "hr",
       "rag-dataset",
       "temperature-0",
-      "career"
+      "identity"
     ],
-    "question": "Whant is your name?",
-    "answer": "I am Ateet' AI clone. Desigenged and developed by Ateet."
+    "question": "What is your name?",
+    "answer": "I am Ateet's AI clone. Designed and developed by Ateet Vatan Bahmani."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your full name?",
+    "answer": "Ateet Vatan Bahmani."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Where are you located?",
+    "answer": "Essen, Germany."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your professional title?",
+    "answer": "AI Engineer | LLM Integration & AI Automation Expert. Freelance AI Engineer Consultant."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "hr",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Give me a short bio or introduction.",
+    "answer": "Ateet Vatan Bahmani is an AI Engineer based in Essen, Germany, specializing in LLM integration, AI workflow automation, LangChain development, AutoGen multi-agent systems, and AI system design. He builds enterprise-grade agentic AI systems and RAG pipelines, and is the architect of MASX AI—a doctrine-driven geopolitical forecasting system with multi-agent orchestration."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your LinkedIn profile?",
+    "answer": "https://www.linkedin.com/in/ateet-vatan-bahmani/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your GitHub profile?",
+    "answer": "https://github.com/AteetVatan"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your portfolio website?",
+    "answer": "https://ateetai.vercel.app/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your email address?",
+    "answer": "ab@masxai.com"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "How can someone contact you or connect with you?",
+    "answer": "You can reach Ateet via email at ab@masxai.com, connect on LinkedIn at https://www.linkedin.com/in/ateet-vatan-bahmani/, view his portfolio at https://ateetai.vercel.app/, or explore his open-source projects on GitHub at https://github.com/AteetVatan."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What are your online profiles and links?",
+    "answer": "LinkedIn: https://www.linkedin.com/in/ateet-vatan-bahmani/ | GitHub: https://github.com/AteetVatan | Portfolio: https://ateetai.vercel.app/ | Email: ab@masxai.com"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What are your featured projects?",
+    "answer": "1) MASX AI – A modular, strategic LLM agent system for geopolitical simulation and ethical decision augmentation (Python, Flask, LangChain, AutoGen, Supabase, Redis, Airflow, Docker). Live at https://masx-ai-client.vercel.app/. 2) EchoAI – A personal AI voice clone with RAG-powered knowledge retrieval and real-time voice synthesis. 3) AgenticMatch-3H – A 3-hour Agentic AI prototype for brand matching using CLIP embeddings and FAISS similarity search (Python, CLIP, FastAPI). Live at https://huggingface.co/spaces/AteetVatan/agenticmatch. 4) Nexora Portfolio – Portfolio website (React, TypeScript, Tailwind CSS, Vite, Supabase). Live at https://ateetai.vercel.app/. 5) Movie Management System – Full-stack CRUD app with MVC pattern (Python, Flask, SQLite, Jinja2). 6) Drone Delivery Planner – Real-time drone delivery optimization (C#, AWS, Map APIs). 7) Masterblog API – MVC-inspired modular API for blog management (Python, Flask, SQLAlchemy)."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about MASX AI.",
+    "answer": "MASX AI is a Multimodal Autonomous Strategic Intelligence System—a modular, strategic LLM agent system for geopolitical simulation and ethical decision augmentation. It features multi-agent orchestration with LangChain and AutoGen, real-time LLM pipelines with Flask APIs, Redis caching, Supabase databases, Airflow orchestration, and strategic doctrine simulation for reasoning about geopolitical strategies. Client: https://github.com/AteetVatan/MASX_AI_CLIENT, Server: https://github.com/AteetVatan/MASX_AI_SERVER, GDELT API: https://github.com/AteetVatan/MASX_AI_GDELT_API. Live demo: https://masx-ai-client.vercel.app/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about EchoAI.",
+    "answer": "EchoAI is a personal AI voice clone system built with Retrieval-Augmented Generation (RAG). It uses a vector database (ChromaDB/FAISS) to store and retrieve knowledge about Ateet, combined with real-time text-to-speech and speech-to-text capabilities. It powers Ateet's AI digital twin, allowing natural voice conversations grounded in his real experience and personality."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about AgenticMatch.",
+    "answer": "AgenticMatch-3H is a 3-hour Agentic AI prototype that lets users upload an image and matches it to partner brands based on visual style and mood using CLIP embeddings and FAISS similarity search. Built with Python, CLIP, and FastAPI. Live demo on Hugging Face: https://huggingface.co/spaces/AteetVatan/agenticmatch. GitHub: https://github.com/AteetVatan/AgenticMatch-3H"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "skills",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your full tech stack?",
+    "answer": "AI/LLM Engineering: LangChain, LangGraph, AutoGen, CrewAI, RAG (ChromaDB/FAISS), Hugging Face, Prompt Engineering, Ethical Simulation Frameworks, Autonomous Agent Routing. Fullstack: Python (Flask, FastAPI), C#, .NET Core, React, Angular, Vite, TypeScript. Data & Infrastructure: Supabase, Redis, Airflow, Kafka, Vector Databases, Microservices Architecture. Cloud & DevOps: Docker, GitHub Actions, GitLab CI/CD, Azure DevOps, AWS (Lambda, ECS, S3, API Gateway, IAM), Vercel. AI Tools: OpenAI APIs, Mistral Models, Pinecone, Edge-TTS, CLIP embeddings."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "skills",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What AI and LLM frameworks do you use?",
+    "answer": "LangChain, LangGraph, AutoGen, CrewAI, Hugging Face Transformers, LlamaIndex. For vector retrieval: ChromaDB, FAISS, and Pinecone. For LLM providers: OpenAI, Mistral, and Gemini."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "education",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your education background?",
+    "answer": "AI Engineering program at Masterschool (2025), PCEP certification (2025). Over 12 years of professional software engineering experience starting at IHS Markit (2012–2024), progressing from Software Engineer to Senior Software Engineer before transitioning fully into AI Engineering."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career",
+      "timeline",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your career timeline?",
+    "answer": "2012–2024: Software Engineer → Senior Software Engineer at IHS Markit (automotive software, IT services). Dec 2024–Present: Freelance AI Engineer Consultant, building MASX AI and other AI products with LangChain, AutoGen, RAG, and multi-agent orchestration."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "vision",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your current focus?",
+    "answer": "Building MASX AI — a doctrine-driven geopolitical forecasting system with multi-agent orchestration. Also building EchoAI — a personal AI voice clone system. Implementing real-time LLM pipelines with Flask APIs, Redis caching, Supabase databases, and Airflow orchestration. Designing LangChain and AutoGen-based LLM agents with adaptive ethics and vectorized memory retrieval."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "vision",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your MASX AI vision for 2024-2025?",
+    "answer": "Architect a modular, dynamic multi-agent system for strategic simulation. Integrate live geopolitical data ingestion pipelines and real-time adaptive doctrine engines. Develop ethical simulation layers for value-aligned decision making. Engineer scalable memory retrieval systems using custom vector databases and Supabase optimization. Position MASX AI for real-world applications in defense, policy intelligence, and mission-critical automation."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "github",
+      "open-source",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Where can I find your open-source repositories?",
+    "answer": "All public repositories are available at https://github.com/AteetVatan?tab=repositories. Featured repos include MASX_AI_CLIENT, MASX_AI_SERVER, MASX_AI_GDELT_API, AgenticMatch-3H, Movie_Project, Ateet_Portfolio_APP_Nexora, Masterblog_API, DroneDeliveryPlanner, and Masterblog."
   },
   {
     "doc_type": "career",

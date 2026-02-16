@@ -24,7 +24,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.memory import ConversationBufferMemory
 
-# Mistral integration
+# Mistral integration (fallback)
 try:
     from langchain_mistralai import ChatMistralAI
     MISTRAL_AVAILABLE = True
@@ -64,7 +64,7 @@ class LangChainRAGAgent:
         # Initialize self-info knowledge base
         self.self_info_knowledge_base = self._setup_self_info_knowledge_base()
         
-        # Initialize LLMs (Mistral primary, OpenAI fallback)
+        # Initialize LLMs (DeepSeek primary, Mistral fallback)
         self.primary_llm, self.fallback_llm = self._setup_llms()
         
         # Initialize RAG chain
@@ -202,42 +202,49 @@ class LangChainRAGAgent:
             logger.error(f"Failed to load self-info data: {str(e)}")
     
     def _setup_llms(self):
-        """Set up LLMs with Mistral as primary and OpenAI as fallback."""
+        """Set up LLMs with DeepSeek as primary and Mistral as fallback."""
         primary_llm = None
         fallback_llm = None
         
         try:
-            # Primary: Mistral
+            # Primary: DeepSeek (via OpenAI-compatible API)
+            if self.settings.DEEPSEEK_API_KEY:
+                primary_llm = ChatOpenAI(
+                    model=self.settings.DEEPSEEK_MODEL,
+                    openai_api_key=self.settings.DEEPSEEK_API_KEY,
+                    openai_api_base=self.settings.DEEPSEEK_API_BASE,
+                    temperature=0.7,
+                    max_tokens=1500
+                )
+                logger.info("DeepSeek LLM initialized as primary")
+            else:
+                logger.warning("DeepSeek API key not available, will try Mistral as primary")
+        except Exception as e:
+            logger.error(f"Failed to setup DeepSeek LLM: {str(e)}")
+        
+        try:
+            # Fallback: Mistral
             if MISTRAL_AVAILABLE and self.settings.MISTRAL_API_KEY:
-                primary_llm = ChatMistralAI(
-                    model="mistral-small",
+                fallback_llm = ChatMistralAI(
+                    model=self.settings.MISTRAL_MODEL,
                     mistral_api_key=self.settings.MISTRAL_API_KEY,
                     temperature=0.7,
                     max_tokens=1500
                 )
-                logger.info("Mistral LLM initialized as primary")
+                logger.info("Mistral LLM initialized as fallback")
             else:
-                logger.warning("Mistral not available or no API key, using OpenAI as primary")
+                logger.warning("Mistral not available or no API key for fallback")
         except Exception as e:
             logger.error(f"Failed to setup Mistral LLM: {str(e)}")
         
-        try:
-            # Fallback: OpenAI
-            fallback_llm = ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=0.7,
-                openai_api_key=self.settings.OPENAI_API_KEY,
-                max_tokens=1500
-            )
-            logger.info("OpenAI LLM initialized as fallback")
-        except Exception as e:
-            logger.error(f"Failed to setup OpenAI LLM: {str(e)}")
-            raise Exception("No LLM available - both Mistral and OpenAI failed to initialize")
+        # If neither initialized, raise
+        if primary_llm is None and fallback_llm is None:
+            raise Exception("No LLM available - both DeepSeek and Mistral failed to initialize")
         
-        # Use OpenAI as primary if Mistral failed
+        # Use fallback as primary if DeepSeek failed
         if primary_llm is None:
             primary_llm = fallback_llm
-            logger.info("Using OpenAI as both primary and fallback LLM")
+            logger.info("Using Mistral as both primary and fallback LLM")
         
         return primary_llm, fallback_llm
     
