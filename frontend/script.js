@@ -42,9 +42,9 @@ class EchoAIClient {
         // Bind event listeners
         this.connectBtn.addEventListener('click', () => this.toggleConnection());
         this.recordBtn.addEventListener('click', () => this.toggleRecording());
-        // Hide streaming functionality for now
-        // this.streamBtn.addEventListener('click', () => this.toggleStreaming());
-        // this.pauseResumeBtn.addEventListener('click', () => this.toggleStreamingPause());
+        // test streaming functionality for now
+        this.streamBtn.addEventListener('click', () => this.toggleStreaming());
+        this.pauseResumeBtn.addEventListener('click', () => this.toggleStreamingPause());
         this.clearBtn.addEventListener('click', () => this.clearConversation());
 
         // Initialize
@@ -109,12 +109,11 @@ class EchoAIClient {
                 this.connectBtn.textContent = 'Disconnect';
                 this.connectBtn.disabled = false;
                 this.recordBtn.disabled = false;
-                // Hide streaming button for now
-                // this.streamBtn.disabled = false;
+                this.streamBtn.disabled = false; // Enable streaming button
                 this.clearBtn.disabled = false;
                 this.showStats();
                 this.startKeepAlive();
-                console.log('Connected to EchoAI server');
+                console.log('Connected to EchoAI server - streaming enabled');
             };
 
             this.websocket.onmessage = (event) => {
@@ -135,6 +134,7 @@ class EchoAIClient {
                 this.connectBtn.disabled = false;
                 this.recordBtn.disabled = true;
                 this.streamBtn.disabled = true;
+                this.pauseResumeBtn.style.display = 'none'; // Hide pause button
                 this.recordBtn.textContent = '🎤 Start Recording';
                 this.streamBtn.textContent = '🌊 Start Streaming';
                 this.recordBtn.classList.remove('recording');
@@ -142,6 +142,9 @@ class EchoAIClient {
                 this.isRecording = false;
                 this.stopChunkInterval();
                 this.stopKeepAlive();
+
+                // Clean up streaming resources
+                this.stopStreaming();
 
                 // Attempt reconnection if not manually disconnected
                 if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -492,6 +495,14 @@ class EchoAIClient {
      * Toggle streaming audio
      */
     async toggleStreaming() {
+        console.log('Toggle streaming called, isStreaming:', this.isStreaming, 'isConnected:', this.isConnected);
+
+        // Check WebSocket connection first
+        if (!this.isConnected || !this.websocket) {
+            this.addMessage('error', 'Please connect to the server first before starting streaming.');
+            return;
+        }
+
         if (this.isStreaming) {
             this.stopStreaming();
         } else {
@@ -504,6 +515,15 @@ class EchoAIClient {
      */
     async startStreaming() {
         try {
+            console.log('Starting streaming...');
+
+            // Check WebSocket connection first
+            if (!this.isConnected || !this.websocket) {
+                throw new Error('Not connected to server. Please connect first.');
+            }
+
+            // Request microphone access
+            console.log('Requesting microphone access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     sampleRate: this.sampleRate,
@@ -512,6 +532,8 @@ class EchoAIClient {
                     noiseSuppression: true
                 }
             });
+
+            console.log('Microphone access granted, creating audio context...');
 
             // Create audio context for streaming - real-time processing
             const audioContext = new AudioContext({ sampleRate: this.sampleRate });
@@ -530,6 +552,7 @@ class EchoAIClient {
             this.pauseResumeBtn.classList.remove('paused');
 
             // Send start streaming message
+            console.log('Sending start_streaming message to server...');
             this.websocket.send(JSON.stringify({
                 type: 'start_streaming'
             }));
@@ -560,11 +583,27 @@ class EchoAIClient {
             // Start periodic processing check
             this.startPeriodicProcessing();
 
-            console.log('Started real-time streaming audio with auto-pause');
+            console.log('Started real-time streaming audio successfully');
+            this.addMessage('system', 'Streaming started successfully! Speak into your microphone.');
 
         } catch (error) {
             console.error('Failed to start streaming:', error);
-            this.addMessage('error', 'Failed to start streaming. Please check microphone permissions.');
+
+            // Reset button state
+            this.streamBtn.textContent = '🌊 Start Streaming';
+            this.streamBtn.classList.remove('streaming');
+            this.isStreaming = false;
+
+            // Show user-friendly error messages
+            if (error.name === 'NotAllowedError') {
+                this.addMessage('error', 'Microphone access denied. Please allow microphone permissions and try again.');
+            } else if (error.name === 'NotFoundError') {
+                this.addMessage('error', 'No microphone found. Please connect a microphone and try again.');
+            } else if (error.message.includes('Not connected')) {
+                this.addMessage('error', 'Please connect to the server first before starting streaming.');
+            } else {
+                this.addMessage('error', `Failed to start streaming: ${error.message}`);
+            }
         }
     }
 

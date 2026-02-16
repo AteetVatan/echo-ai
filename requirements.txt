@@ -36,6 +36,9 @@ sentence-transformers>=2.2.2   # Embedding models
 aiohttp==3.9.1                 # Async HTTP client
 httpx==0.25.2                  # Modern HTTP client
 
+# Text-to-Speech
+edge-tts>=6.1.0                # Free Microsoft Edge neural TTS
+
 # Configuration & Utilities
 python-dotenv>=1.0.0           # Environment variable management
 pydantic>=2.7.4                # Data validation

@@ -143,3 +143,8 @@ audio_cache/*.wav
 .DS_Store
 Thumbs.db
 rag_persona_db/document/CV_AI_Clone.docx
+
+# ChromaDB / vector database binary files
+*.bin
+src/db/chroma_db/
+src/db/self_info_knowledge/

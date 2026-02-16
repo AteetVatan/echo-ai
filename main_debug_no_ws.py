@@ -223,7 +223,6 @@ async def main():
     # Parse command line arguments
     # create os path
     audio_file_path = os.path.join(os.path.dirname(__file__), 'audio_cache', 'test_file.mp3')
-    # audio_cache/DTspCYcPUEd8ZsrSm2qm_4788221984486102553.wav
     logger.info(f" Using audio file: {audio_file_path}")
     
     

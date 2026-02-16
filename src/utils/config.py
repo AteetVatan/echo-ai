@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     # API Keys
     #HUGGINGFACE_API_KEY: str = Field(..., env="HUGGINGFACE_API_KEY")
     OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
-    ELEVENLABS_API_KEY: str = Field(..., env="ELEVENLABS_API_KEY")
     MISTRAL_API_KEY: str = Field(..., env="MISTRAL_API_KEY")
     
     # Model Configuration
@@ -31,10 +30,8 @@ class Settings(BaseSettings):
     # Mistral Configuration
     MISTRAL_API_BASE: str = Field("https://api.mistral.ai", env="MISTRAL_API_BASE")
     
-    # ElevenLabs Configuration
-    ELEVENLABS_API_BASE: str = Field("https://api.elevenlabs.io/v1", env="ELEVENLABS_API_BASE")
-    ELEVENLABS_VOICE_ID: str = Field("21m00Tcm4TlvDq8ikWAM", env="ELEVENLABS_VOICE_ID")
-    ELEVENLABS_MODEL_ID: str = Field("eleven_monolingual_v1", env="ELEVENLABS_MODEL_ID")
+    # Edge-TTS Configuration
+    EDGE_TTS_VOICE: str = Field("en-IN-PrabhatNeural", env="EDGE_TTS_VOICE")
     
     # Latency Configuration
     STT_CHUNK_DURATION: float = Field(2.0, env="STT_CHUNK_DURATION")
@@ -88,7 +85,6 @@ def validate_api_keys() -> bool:
     """
     required_keys = [        
         settings.OPENAI_API_KEY,
-        settings.ELEVENLABS_API_KEY,
         settings.MISTRAL_API_KEY
     ]
     

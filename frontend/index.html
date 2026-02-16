@@ -655,8 +655,8 @@
         <div class="controls">
             <button id="connectBtn" class="btn btn-primary">🔌 Connect</button>
             <button id="recordBtn" class="btn btn-secondary">🎤 Start Recording</button>
-            <button id="streamBtn" class="btn btn-secondary" style="display: none;">🌊 Start Streaming</button>
-            <button id="pauseResumeBtn" class="btn btn-secondary" style="display: none;">⏸️ Pause</button>
+            <button id="streamBtn" class="btn btn-secondary">🌊 Start Streaming</button>
+            <button id="pauseResumeBtn" class="btn btn-secondary">⏸️ Pause</button>
             <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
         </div>
 
@@ -665,13 +665,13 @@
         </div>
 
         <!-- Enhanced instructions section -->
-        <div class="instructions">
+        <div class="instructions" style="display: none;">
             <h3>📋 How to Use</h3>
             <div class="instruction-text">
                 <p>1. Click <strong>🔌 Connect</strong> to connect to the AI server</p>
-                <p>2. Click <strong>🎤 Start Recording</strong> to begin recording your voice</p>
-                <p>3. Speak your message clearly into the microphone</p>
-                <p>4. Click <strong>⏹️ Stop Recording</strong> when you're done speaking</p>
+                <p>2. Click <strong>🎤 Start Recording</strong> for traditional recording</p>
+                <p>3. Click <strong>🌊 Start Streaming</strong> for real-time conversation</p>
+                <p>4. Speak your message clearly into the microphone</p>
                 <p>5. Wait for the AI to process and respond with voice</p>
             </div>
         </div>
@@ -693,8 +693,7 @@
 
         <div class="footer">
             <div class="streaming-note">
-                <p><strong>🌊 Streaming Mode:</strong> Currently under development. Coming soon for real-time
-                    conversations!</p>
+                <p><strong>🌊 Streaming Mode:</strong> Real-time voice conversations enabled!</p>
             </div>
             <p>Powered by FastAPI, WebSockets, and AI Services</p>
             <p>Real-time STT → LLM → TTS Pipeline</p>

@@ -1,17 +1,14 @@
 """
 Text-to-Speech service for EchoAI voice chat system.
 
-This module provides TTS functionality using ElevenLabs API with streaming
-support and caching for optimal performance.
+This module provides TTS functionality using Microsoft Edge neural TTS
+(via edge-tts) with streaming support and caching for optimal performance.
 """
 
 import asyncio
 import time
-import hashlib
-from typing import Dict, Any, List, Optional, Generator, AsyncGenerator
-import aiohttp
-from asyncio import Semaphore
-import random
+from typing import Dict, Any, List, Optional, AsyncGenerator
+import edge_tts
 
 from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
@@ -26,10 +23,7 @@ class TTSService:
     """Text-to-Speech service with streaming and caching support."""
     
     def __init__(self):
-        self.api_key = settings.ELEVENLABS_API_KEY
-        self.voice_id = settings.ELEVENLABS_VOICE_ID
-        self.model_id = settings.ELEVENLABS_MODEL_ID
-        self.base_url = settings.ELEVENLABS_API_BASE
+        self.voice = settings.EDGE_TTS_VOICE
         
         self.db = DBOperations()
         
@@ -37,7 +31,6 @@ class TTSService:
         self.cache_enabled = settings.TTS_CACHE_ENABLED
         
         self.streaming_enabled = settings.TTS_STREAMING
-        self.semaphore = asyncio.Semaphore(5)
         
         # Performance tracking
         self.performance_stats = {
@@ -49,12 +42,10 @@ class TTSService:
             "latencies": []
         }
         
-    def _init_audio_cache(self):
-        """Initialize audio cache from database."""
+    def _init_audio_cache(self) -> Dict[str, bytes]:
+        """Load audio cache from database and return it."""
         try:
-            cache = self.db.load_all_audio(self.voice_id)
-            for cache_key, audio_data in cache.items():
-                self.cache[cache_key] = audio_data
+            cache = self.db.load_all_audio(self.voice)
             logger.info(f"Loaded {len(cache)} audio entries from database")
             return cache
         except Exception as e:
@@ -62,33 +53,33 @@ class TTSService:
             return {}
         
     
-    def _get_cache_key(self, text: str, voice_id: str = None) -> str:
+    def _get_cache_key(self, text: str, voice: str = None) -> str:
         """Generate cache key for text and voice combination."""
-        voice = voice_id or self.voice_id
+        v = voice or self.voice
         text_hash = str(abs(hash(text)))
-        return f"{voice}_{text_hash}"
+        return f"{v}_{text_hash}"
     
-    def _is_cached(self, text: str, voice_id: str = None) -> bool:
+    def _is_cached(self, text: str, voice: str = None) -> bool:
         """Check if text is cached."""
         if not self.cache_enabled:
             return False
-        cache_key = self._get_cache_key(text, voice_id)
+        cache_key = self._get_cache_key(text, voice)
         return cache_key in self.cache
     
-    def _get_cached_audio(self, text: str, voice_id: str = None) -> Optional[bytes]:
+    def _get_cached_audio(self, text: str, voice: str = None) -> Optional[bytes]:
         """Get cached audio data."""
         if not self.cache_enabled:
             return None
         
         # First check in-memory cache
-        cache_key = self._get_cache_key(text, voice_id)
+        cache_key = self._get_cache_key(text, voice)
         if cache_key in self.cache:
             return self.cache[cache_key]
         
         # If not in memory, try database
-        voice = voice_id or self.voice_id
+        v = voice or self.voice
         try:
-            audio_data = self.db.load_audio(text, voice)
+            audio_data = self.db.load_audio(text, v)
             if audio_data:
                 # Add to in-memory cache
                 self.cache[cache_key] = audio_data
@@ -98,11 +89,11 @@ class TTSService:
         
         return None
     
-    def _cache_audio(self, text: str, audio_data: bytes, voice_id: str = None) -> None:
+    def _cache_audio(self, text: str, audio_data: bytes, voice: str = None) -> None:
         """Cache audio data."""
         if not self.cache_enabled:
             return
-        cache_key = self._get_cache_key(text, voice_id)
+        cache_key = self._get_cache_key(text, voice)
         self.cache[cache_key] = audio_data
         
         # Limit cache size
@@ -113,14 +104,14 @@ class TTSService:
                 del self.cache[key]
     
     @log_performance
-    async def synthesize_speech(self, text: str, use_streaming: bool = True, voice_id: str = None) -> Dict[str, Any]:
+    async def synthesize_speech(self, text: str, use_streaming: bool = True, voice: str = None) -> Dict[str, Any]:
         """
-        Synthesize speech from text using ElevenLabs API.
+        Synthesize speech from text using Edge-TTS.
         
         Args:
             text: Text to synthesize
             use_streaming: Whether to use streaming synthesis
-            voice_id: Voice ID to use (optional)
+            voice: Voice name to use (optional, e.g. "en-IN-PrabhatNeural")
             
         Returns:
             Dict with audio data and metadata
@@ -131,7 +122,7 @@ class TTSService:
             self.performance_stats["total_syntheses"] += 1
             
             # Check cache first
-            cached_audio = self._get_cached_audio(text, voice_id)
+            cached_audio = self._get_cached_audio(text, voice)
             if cached_audio:
                 self.performance_stats["cache_hits"] += 1
                 latency = time.time() - start_time
@@ -139,25 +130,25 @@ class TTSService:
                 
                 return {
                     "audio_data": cached_audio,
-                    "model": "elevenlabs_cached",
+                    "model": "edge_tts_cached",
                     "latency": latency,
                     "cached": True
                 }
             
-            # Choose synthesis method
-            result = await self.synthesize_with_retry(text, voice_id, use_streaming=use_streaming)
+            # Synthesize with edge-tts
+            result = await self._synthesize(text, voice)
             
             if "error" in result:
                 self._update_stats(time.time() - start_time, False)
                 return result
             
             # Cache the result
-            self._cache_audio(text, result["audio_data"], voice_id)
+            self._cache_audio(text, result["audio_data"], voice)
             
             # Save to database
             try:
-                voice = voice_id or self.voice_id
-                self.db.save_audio(text, result["audio_data"], voice)
+                v = voice or self.voice
+                self.db.save_audio(text, result["audio_data"], v)
             except Exception as e:
                 logger.warning(f"Failed to save audio to database: {str(e)}")
             
@@ -170,105 +161,42 @@ class TTSService:
             log_error_with_context(logger, e, {"method": "synthesize_speech", "text_length": len(text)})
             return {"error": f"Speech synthesis failed: {str(e)}"}
     
-    async def _synthesize_streaming(self, text: str, voice_id: str = None) -> Dict[str, Any]:
-        """Synthesize speech using streaming API."""
+    async def _synthesize(self, text: str, voice: str = None) -> Dict[str, Any]:
+        """Synthesize speech using Edge-TTS."""
         start_time = time.time()
         
         try:
-            voice = voice_id or self.voice_id
-            url = f"{self.base_url}/text-to-speech/{voice}/stream"
+            v = voice or self.voice
+            communicate = edge_tts.Communicate(text, v)
             
-            headers = {
-                "Accept": "audio/mpeg",
-                "Content-Type": "application/json",
-                "xi-api-key": self.api_key
-            }
+            # Collect all audio chunks
+            audio_chunks = []
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_chunks.append(chunk["data"])
             
-            data = {
-                "text": text,
-                "model_id": self.model_id,
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.5
-                }
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=data) as response:
-                    if response.status == 200:
-                        audio_data = await response.read()
-                        latency = time.time() - start_time
-                        
-                        logger.debug(f"Streaming synthesis completed in {latency:.3f}s")
-                        
-                        return {
-                            "audio_data": audio_data,
-                            "model": "elevenlabs_streaming",
-                            "latency": latency,
-                            "cached": False
-                        }
-                    else:
-                        error_text = await response.text()
-                        raise Exception(f"ElevenLabs API error: {response.status} - {error_text}")
-                        
-        except Exception as e:
+            audio_data = b"".join(audio_chunks)
             latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_synthesize_streaming", "latency": latency})
+            
+            logger.debug(f"Edge-TTS synthesis completed in {latency:.3f}s ({len(audio_data)} bytes)")
+            
+            return {
+                "audio_data": audio_data,
+                "model": "edge_tts",
+                "latency": latency,
+                "cached": False
+            }
+                    
+        except Exception as e:
             raise
     
-    async def _synthesize_non_streaming(self, text: str, voice_id: str = None) -> Dict[str, Any]:
-        """Synthesize speech using non-streaming API."""
-        start_time = time.time()
-        
-        try:
-            voice = voice_id or self.voice_id
-            url = f"{self.base_url}/text-to-speech/{voice}"
-            
-            headers = {
-                "Accept": "audio/mpeg",
-                "Content-Type": "application/json",
-                "xi-api-key": self.api_key
-            }
-            
-            data = {
-                "text": text,
-                "model_id": self.model_id,
-                "voice_settings": {
-                    "stability": 0.5, 
-                    "similarity_boost": 0.5
-                }
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=data) as response:
-                    if response.status == 200:
-                        audio_data = await response.read()
-                        latency = time.time() - start_time
-                        
-                        logger.debug(f"Non-streaming synthesis completed in {latency:.3f}s")
-                        
-                        return {
-                            "audio_data": audio_data,
-                            "model": "elevenlabs_non_streaming",
-                            "latency": latency,
-                            "cached": False
-                        }
-                    else:
-                        error_text = await response.text()
-                        raise Exception(f"ElevenLabs API error: {response.status} - {error_text}")
-                        
-        except Exception as e:
-            latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_synthesize_non_streaming", "latency": latency})
-            raise
-    
-    async def synthesize_streaming_chunks(self, text: str, voice_id: str = None) -> AsyncGenerator[bytes, None]:
+    async def synthesize_streaming_chunks(self, text: str, voice: str = None) -> AsyncGenerator[bytes, None]:
         """
         Synthesize speech in streaming chunks for real-time playback.
         
         Args:
             text: Text to synthesize
-            voice_id: Voice ID to use (optional)
+            voice: Voice name to use (optional)
             
         Yields:
             Audio chunks as bytes
@@ -282,7 +210,7 @@ class TTSService:
                     continue
                 
                 # Synthesize each sentence
-                result = await self.synthesize_speech(sentence, use_streaming=True, voice_id=voice_id)
+                result = await self.synthesize_speech(sentence, use_streaming=True, voice=voice)
                 
                 if "error" in result:
                     logger.error(f"Failed to synthesize sentence: {result['error']}")
@@ -301,30 +229,6 @@ class TTSService:
             log_error_with_context(logger, e, {"method": "synthesize_streaming_chunks", "text_length": len(text)})
             raise
         
-
-
-    async def synthesize_with_retry(self, text: str, voice_id: str = None, use_streaming: bool = False, retries: int = 3):
-        """Synthesize speech with concurrency control and retries for rate-limit errors."""
-        for attempt in range(retries):
-            try:
-                async with self.semaphore:  # Concurrency limit
-
-                    if use_streaming and self.streaming_enabled:
-                        result = await self._synthesize_streaming(text, voice_id)
-                    else:
-                        result = await self._synthesize_non_streaming(text, voice_id)
-
-                    return result  #Success: return immediately
-
-            except Exception as e:
-                if "too_many_concurrent_requests" in str(e):
-                    wait_time = 2 ** attempt + random.random()
-                    logger.warning(f"[TTS] Concurrency limit hit. Retrying in {wait_time:.2f}s (Attempt {attempt+1}/{retries})")
-                    await asyncio.sleep(wait_time)
-                else:
-                    raise  # Non-rate-limit error → propagate immediately
-
-        raise Exception(f"[TTS] Failed after {retries} retries: Too many concurrent requests")
 
     
     def _split_into_sentences(self, text: str) -> List[str]:
@@ -355,13 +259,10 @@ class TTSService:
                 "I appreciate your input."
             ]
             
-            # Synthesize common phrases (synchronous for warm-up)
+            # Synthesize common phrases
             for phrase in common_phrases:
                 try:
-                    # Use asyncio.run to run the async synthesis in sync context
-                    result = await self.synthesize_speech(phrase, use_streaming=False, voice_id=self.voice_id)
-                    
-                    
+                    result = await self.synthesize_speech(phrase, use_streaming=False, voice=self.voice)
                     if "error" in result:
                         logger.warning(f"Failed to synthesize phrase: {result['error']}")
                 except Exception as e:

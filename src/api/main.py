@@ -374,6 +374,7 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
         current_buffer = manager.get_audio_buffer(session_id)
         total_size = sum(len(chunk) for chunk in current_buffer) + len(audio_chunk)
         if total_size > 10 * 1024 * 1024:  # 10MB total buffer limit
+            #should we disable it?
             await manager.send_message(session_id, {
                 "type": "error",
                 "message": "Audio buffer full (max 10MB total). Stop streaming to process."

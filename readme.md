@@ -33,7 +33,7 @@ This project pushes the boundaries of what's possible in human-AI communication,
 
 ### 🎤 **Real-Time Voice Processing**
 - **Ultra-low latency STT** using Whisper ASR with streaming optimization
-- **Instant TTS synthesis** with ElevenLabs/OpenAI fallback support
+- **Instant TTS synthesis** with Edge-TTS (Microsoft neural voices)
 - **Audio streaming** for natural conversation flow
 
 ### 🧠 **RAG-Powered Intelligence**
@@ -213,8 +213,7 @@ Search results → Knowledge retrieval → Context assembly → LLM reasoning �
 ### **4. Audio Synthesis & Delivery**
 Generated text → TTS processing → Audio streaming → Client playback → Cache storage
 
-- **ElevenLabs TTS** with voice cloning
-- **OpenAI TTS fallback** for reliability
+- **Edge-TTS** with Microsoft neural voices (free, no API key required)
 - **Audio chunking** for streaming optimization
 - **Persistent storage** for future reuse
 
@@ -308,7 +307,6 @@ pip install -r requirements.txt
 # Set up environment variables
 export OPENAI_API_KEY="your-openai-key"
 export MISTRAL_API_KEY="your-mistral-key"
-export ELEVENLABS_API_KEY="your-elevenlabs-key"
 export DATABASE_URL="postgresql://user:pass@localhost/echoai"
 ```
 
@@ -318,8 +316,7 @@ export DATABASE_URL="postgresql://user:pass@localhost/echoai"
 # .env file structure
 OPENAI_API_KEY=sk-...
 MISTRAL_API_KEY=your-mistral-key
-ELEVENLABS_API_KEY=your-elevenlabs-key
-ELEVENLABS_VOICE_ID=voice-id
+EDGE_TTS_VOICE=en-IN-PrabhatNeural
 DATABASE_URL=postgresql://user:pass@localhost/echoai
 REDIS_URL=redis://localhost:6379
 CHROMA_PERSIST_DIRECTORY=./chroma_db
@@ -574,7 +571,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## �� Acknowledgments
 
 - **OpenAI** for GPT models and TTS capabilities
-- **ElevenLabs** for voice synthesis technology
+- **Microsoft Edge-TTS** for free neural voice synthesis
 - **LangChain** for RAG framework and agent orchestration
 - **ChromaDB** for vector database technology
 - **Mistral AI** for alternative LLM capabilities
