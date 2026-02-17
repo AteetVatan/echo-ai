@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
-from src.agents.langchain_rag_agent import rag_agent
+from src.agents.langchain_rag_agent import get_rag_agent
 from src.utils.audio import audio_processor, audio_stream_processor
 from src.utils import get_logger, log_performance, log_error_with_context
 from src.constants import ModelName, PipelineSource, LATENCY_WINDOW_SIZE, STREAM_PROCESSING_BATCH_SIZE
@@ -96,11 +96,18 @@ class VoicePipeline:
             "latencies": []
         }
         
-        # Initialize RAG agent
-        self.rag_agent = rag_agent
+        # Initialize RAG agent (lazy — deferred until first access)
+        self._rag_agent = None
         
         # Ensure audio cache directory exists
         os.makedirs(self.audio_cache_dir, exist_ok=True)
+
+    @property
+    def rag_agent(self):
+        """Lazy accessor — initialises the RAG agent on first use."""
+        if self._rag_agent is None:
+            self._rag_agent = get_rag_agent()
+        return self._rag_agent
     
     def _generate_audio_file_path(self, session_id: str = None) -> str:
         """Generate unique audio file path."""

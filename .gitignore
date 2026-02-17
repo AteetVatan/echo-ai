@@ -136,6 +136,8 @@ audio_cache/*.wav
 # IDE files
 .vscode/
 .idea/
+.agent/
+.cursor/
 *.swp
 *.swo
 

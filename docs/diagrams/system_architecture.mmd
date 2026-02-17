@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4f46e5', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#4338ca', 'secondaryColor': '#f97316', 'tertiaryColor': '#10b981'}}}%%
+flowchart TD
+    A["🎤 WebSocket / HTTP Client"] --> B["Audio Input"]
+    B --> C["STT Pipeline"]
+    C --> D["Text Processing"]
+    D --> E["RAG Semantic Search"]
+
+    E --> F{"Response in Cache?"}
+    F -->|"Yes"| G["Audio Cache Hit"]
+    F -->|"No"| H["Knowledge Base Search"]
+
+    H --> I["Self-Info Knowledge Base"]
+    I --> J{"Relevant Knowledge?"}
+    J -->|"Yes"| K["LangChain RAG Chain"]
+    J -->|"No"| L["Direct LLM Generation"]
+
+    K --> M["Context Assembly"]
+    M --> N["LLM Reasoning"]
+    N --> O["Response Generation"]
+
+    L --> O
+    O --> P["TTS Synthesis"]
+    P --> Q["Audio Streaming"]
+
+    G --> R["Instant Audio Response"]
+    Q --> R
+
+    R --> S["🔊 Client Audio Output"]
+
+    subgraph "RAG Memory Layer"
+        T[("ChromaDB Vector Store")]
+        U[("Reply Cache Database")]
+        V[("Self-Info Knowledge Base")]
+        W["Conversation History"]
+    end
+
+    E --> T
+    G --> U
+    H --> V
+    N --> W

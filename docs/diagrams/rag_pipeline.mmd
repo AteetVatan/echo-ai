@@ -1,0 +1,48 @@
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant User
+    participant STT
+    participant RAG_Engine as RAG Engine
+    participant VectorDB as Vector DB
+    participant QueryRouter as Query Router
+    participant KnowledgeBase as Knowledge Base
+    participant LLM
+    participant TTS
+
+    User->>STT: 🎤 Voice Input
+    STT->>RAG_Engine: Processed Text
+
+    RAG_Engine->>VectorDB: Semantic Search (Reply Cache)
+    VectorDB-->>RAG_Engine: Similar Responses
+
+    alt Cache Hit (≥95% similarity)
+        RAG_Engine->>TTS: Cached Audio
+        TTS->>User: 🎵 Instant Response
+    else No Cache
+        RAG_Engine->>QueryRouter: Classify Query Intent
+        QueryRouter-->>RAG_Engine: Route (facts/evidence/both)
+
+        alt Route: Facts
+            RAG_Engine->>KnowledgeBase: Search Facts Index + BM25
+        else Route: Evidence
+            RAG_Engine->>KnowledgeBase: Search Evidence Index
+        else Route: Both
+            RAG_Engine->>KnowledgeBase: Search Both Indices + BM25
+        end
+
+        KnowledgeBase-->>RAG_Engine: Relevant Knowledge (top-5 docs)
+
+        alt Knowledge Found
+            RAG_Engine->>LLM: RAG Chain (context + persona prompt)
+            LLM->>LLM: Grounded Generation (temperature=0)
+            LLM->>RAG_Engine: Grounded Response
+        else No Knowledge
+            RAG_Engine->>LLM: Direct Generation
+            LLM->>RAG_Engine: Generated Response
+        end
+
+        RAG_Engine->>TTS: New Response Text
+        TTS->>TTS: Edge-TTS Synthesis
+        TTS->>User: 🎵 Synthesized Response
+        RAG_Engine->>VectorDB: Store New Interaction
+    end

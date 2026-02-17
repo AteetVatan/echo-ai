@@ -94,6 +94,8 @@ class KnowledgeType(str, Enum):
 class ChromaCollection(str, Enum):
     REPLY_CACHE = "echoai_reply_cache"
     SELF_INFO = "echoai_self_info"
+    SELF_INFO_FACTS = "echoai_self_info_facts"
+    SELF_INFO_EVIDENCE = "echoai_self_info_evidence"
 
 
 # ---------------------------------------------------------------------------
@@ -122,3 +124,12 @@ NORMALIZE_TARGET_RMS = 0.1
 NORMALIZE_MAX_GAIN = 10.0
 
 DEFAULT_AUDIO_CHUNK_SIZE = 1024
+
+
+# ---------------------------------------------------------------------------
+# API route paths
+# ---------------------------------------------------------------------------
+
+class APIRoute(str, Enum):
+    CHAT = "/api/chat"
+    PERSONA = "/api/persona"

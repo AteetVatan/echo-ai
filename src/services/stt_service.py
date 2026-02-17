@@ -74,9 +74,10 @@ class STTService:
                 model_size = "small"      # small model for speed on CPU
                 logger.info("No GPU detected — using CPU with int8 and small model")
 
-            # Load Faster-Whisper model
+            # Load Faster-Whisper model (offload to thread — it's a heavy sync call)
             try:
-                self.fw_model = WhisperModel(
+                self.fw_model = await asyncio.to_thread(
+                    WhisperModel,
                     model_size,   # dynamic based on hardware
                     device=device,
                     compute_type=compute_type,

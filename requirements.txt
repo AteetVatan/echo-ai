@@ -1,46 +1,150 @@
-# ==================================================
-# EchoAI Hybrid Architecture Requirements
-# ==================================================
-
-# Core Framework
-fastapi>=0.104.1
-uvicorn[standard]>=0.24.0
-websockets>=12.0
-
-# AI/ML Libraries - Core Functionality
-openai>=1.99.6                 # OpenAI API client
-mistralai>=0.1.2               # Mistral AI client
-transformers>=4.52.2           # Hugging Face transformers
-torch>=2.4.1                   # PyTorch for ML models
-torchaudio>=2.4.1              # Audio processing with PyTorch
-numpy>=1.26.4,<2.0                 # Numerical computing
-
-# Audio Processing - Essential
-soundfile==0.12.1              # Audio file I/O
-imageio-ffmpeg==0.5.1          # FFmpeg integration
-faster-whisper==1.0.3          # Speech-to-Text processing
-av>=12,<14                     # Video/audio handling
-
-# LangChain & RAG - Core
-langchain>=0.3.27              # LangChain framework
-langchain-community>=0.3.27    # LangChain community integrations
-langchain-openai>=0.3.29       # LangChain OpenAI integration
-langchain-mistralai>=0.2.11    # LangChain Mistral integration
-langchain-core>=0.3.74         # LangChain core components
-
-# Vector Database & Embeddings
-chromadb>=0.4.22               # Vector database
-sentence-transformers>=2.2.2   # Embedding models
-
-# HTTP/Async
-aiohttp==3.9.1                 # Async HTTP client
-httpx==0.25.2                  # Modern HTTP client
-
-# Text-to-Speech
-edge-tts>=6.1.0                # Free Microsoft Edge neural TTS
-
-# Configuration & Utilities
-python-dotenv>=1.0.0           # Environment variable management
-pydantic>=2.7.4                # Data validation
-pydantic-settings>=2.1.0       # Settings management
-
+aiohttp==3.9.1
+aiosignal==1.4.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+asgiref==3.11.1
+attrs==25.4.0
+av==12.3.0
+backoff==2.2.1
+bcrypt==5.0.0
+build==1.4.0
+certifi==2026.1.4
+cffi==2.0.0
+charset-normalizer==3.4.4
+chroma-hnswlib==0.7.3
+chromadb==1.5.0
+click==8.3.1
+colorama==0.4.6
+ctranslate2==4.7.1
+dataclasses-json==0.6.7
+distro==1.9.0
+durationpy==0.10
+edge-tts==7.2.7
+fastapi==0.129.0
+faster-whisper==1.0.3
+filelock==3.24.2
+flatbuffers==25.12.19
+frozenlist==1.8.0
+fsspec==2026.2.0
+googleapis-common-protos==1.72.0
+greenlet==3.3.1
+grpcio==1.78.0
+h11==0.16.0
+hf-xet==1.2.0
+httpcore==1.0.9
+httptools==0.7.1
+httpx==0.28.1
+httpx-sse==0.4.3
+huggingface_hub==1.4.1
+idna==3.11
+imageio-ffmpeg==0.5.1
+importlib_metadata==8.7.1
+importlib_resources==6.5.2
+Jinja2==3.1.6
+jiter==0.13.0
+joblib==1.5.3
+jsonpatch==1.33
+jsonpointer==3.0.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+kubernetes==35.0.0
+langchain==0.3.27
+langchain-chroma==0.2.6
+langchain-community==0.3.31
+langchain-core==0.3.83
+langchain-mistralai==0.2.12
+langchain-openai==0.3.35
+langchain-text-splitters==0.3.11
+langgraph==0.5.1
+langgraph-checkpoint==2.1.0
+langgraph-prebuilt==0.5.2
+langgraph-sdk==0.1.72
+langsmith==0.7.3
+markdown-it-py==4.0.0
+MarkupSafe==3.0.3
+marshmallow==3.26.2
+mdurl==0.1.2
+mistralai==0.4.2
+mmh3==5.2.0
+mpmath==1.3.0
+multidict==6.7.1
+mypy_extensions==1.1.0
+networkx==3.6.1
+numpy==1.26.4
+oauthlib==3.3.1
+onnxruntime==1.24.1
+openai==2.21.0
+opentelemetry-api==1.39.1
+opentelemetry-exporter-otlp-proto-common==1.39.1
+opentelemetry-exporter-otlp-proto-grpc==1.39.1
+opentelemetry-instrumentation==0.60b1
+opentelemetry-instrumentation-asgi==0.60b1
+opentelemetry-instrumentation-fastapi==0.60b1
+opentelemetry-proto==1.39.1
+opentelemetry-sdk==1.39.1
+opentelemetry-semantic-conventions==0.60b1
+opentelemetry-util-http==0.60b1
+orjson==3.10.18
+ormsgpack==1.12.2
+overrides==7.7.0
+packaging==25.0
+posthog==5.4.0
+propcache==0.4.1
+protobuf==6.33.5
+pybase64==1.4.3
+pycparser==3.0
+pydantic==2.12.5
+pydantic-settings==2.13.0
+pydantic_core==2.41.5
+Pygments==2.19.2
+PyPika==0.51.1
+pyproject_hooks==1.2.0
+python-dateutil==2.9.0.post0
+python-docx==1.2.0
+python-dotenv==1.2.1
+PyYAML==6.0.3
+referencing==0.37.0
+regex==2026.1.15
+requests==2.32.5
+requests-oauthlib==2.0.0
+requests-toolbelt==1.0.0
+rich==14.3.2
+rpds-py==0.30.0
+safetensors==0.7.0
+scikit-learn==1.8.0
+scipy==1.17.0
+sentence-transformers==5.2.2
+setuptools==82.0.0
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+soundfile==0.12.1
+SQLAlchemy==2.0.46
+starlette==0.52.1
+sympy==1.14.0
+tabulate==0.9.0
+tenacity==9.1.4
+threadpoolctl==3.6.0
+tiktoken==0.12.0
+tokenizers==0.22.2
+torch==2.10.0
+torchaudio==2.10.0
+tqdm==4.67.3
+transformers==5.1.0
+typer==0.23.1
+typer-slim==0.23.1
+typing-inspect==0.9.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.6.3
+uuid_utils==0.14.0
+uvicorn==0.40.0
+watchfiles==1.1.1
+websocket-client==1.9.0
+websockets==16.0
+wrapt==1.17.3
+xxhash==3.6.0
+yarl==1.22.0
+zipp==3.23.0
+zstandard==0.25.0

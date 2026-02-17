@@ -1,0 +1,36 @@
+Query: 'tell me about your work experience'
+================================================================================
+
+--- FACTS (top 5) ---
+
+[0] score=0.5518
+    Q: What’s your approach to work-life boundaries? A: Define non-negotiable focus times and protect them.
+
+[1] score=0.5665
+    Q: What motivates you at work? A: Complex problem-solving and building systems that last.
+
+[2] score=0.6046
+    Q: Daily routine structure? A: Deep work mornings; design/meetings mid-day; research evenings.
+
+[3] score=0.6058
+    Q: What is your complete work experience timeline? A: Pitney Bowes Software (Software Engineer, Mar 2009–Jul 2011, Noida India), IHS Markit | Technology (Software Engineer, Mar 2012–Jul 2017, Essen/Leverkusen Germany), IHS Markit (Senior Software Engineer, Jul 2017–Nov 2024, Essen Germany), Freelanc
+
+[4] score=0.6122
+    Q: Work-life balance? A: Protected personal blocks and family time.
+
+--- EVIDENCE (top 5) ---
+
+[0] score=0.6918
+    ## 🌟 Features   ### Core Application Features   - **Smart Job Discovery** — Automatically finds and matches jobs from multiple sources (Adzuna, Jooble, TheMuse, StackOverflow, Wellfound) with semantic embedding-based search - **AI-Powered Match Scoring** — Multi-factor compatibility scoring (Skills 
+
+[1] score=0.6984
+    resilience. Plus, review in depth what you’ll need to know about information asset security and control.</p>
+
+[2] score=0.7062
+    ### Analytics   - **Application Funnel** — Visual funnel from applications to interviews to offers - **Conversion Rates** — Track application-to-interview and interview-to-offer rates - **Timing Intelligence** — Best day-of-week and hour to apply, days-after-posting analysis - **Resume A/B Testing**
+
+[3] score=0.7256
+    ### Career Tools   - **Mock Interview Roleplay** — AI-conducted mock interviews with configurable role, company, type (behavioral/technical/mixed), experience level, and focus areas. Get per-answer feedback with scoring and improvement suggestions, plus an end-of-session summary with recommendations
+
+[4] score=0.7272
+    and CI/CD checks to keep quality high at speed. Enabled engineers via reusable templates/patterns for tool/function calling and RAG style retrieval where applicable. Ran small experiments to evaluate AI workflows (quality, latency, cost), then standardized successful patterns into repeatable playboo

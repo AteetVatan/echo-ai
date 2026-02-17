@@ -10,9 +10,9 @@ import json
 import uuid
 import base64
 from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 import uvicorn
 import platform
 import subprocess
@@ -26,7 +26,9 @@ from src.utils import get_settings, validate_api_keys
 from src.utils import setup_logging, get_logger
 from src.utils.audio import audio_stream_processor
 from src.api.connection_manager import ConnectionManager
-from src.constants import WSMessageType, AUDIO_CHUNK_MAX_BYTES, AUDIO_BUFFER_MAX_BYTES
+from src.constants import (
+    WSMessageType, AUDIO_CHUNK_MAX_BYTES, AUDIO_BUFFER_MAX_BYTES, APIRoute,
+)
 
 
 # Setup logging
@@ -50,21 +52,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add static file serving for frontend
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import pathlib
-
-#frontend directory path
-frontend_path = pathlib.Path(__file__).parent.parent.parent / "frontend"
-
-# Serve static files if frontend directory exists
-if frontend_path.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
-
-
 # Global connection manager
 manager = ConnectionManager()
+
+
+# ---------------------------------------------------------------------------
+# Pydantic request/response models for REST chat API
+# ---------------------------------------------------------------------------
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+    source: str
+    cached: bool
 
 
 @app.on_event("startup")
@@ -77,14 +82,27 @@ async def startup_event():
         if not validate_api_keys():
             logger.warning("Some API keys are missing or invalid. Check your .env file.")
         
-        # Warm up services
-        await asyncio.gather(
-            stt_service.warm_up_models(),
-            llm_service.warm_up_models()
-        )
-        await tts_service.warm_up_cache()
-        
-        logger.info("EchoAI Voice Chat API started successfully")
+        # Fire-and-forget heavy warm-up tasks so Uvicorn starts accepting
+        # connections immediately.  Each task runs concurrently in the
+        # background; if a request arrives before they finish the lazy
+        # property / getter will block only that single request.
+        async def _background_warmup():
+            try:
+                await asyncio.gather(
+                    stt_service.warm_up_models(),
+                    llm_service.warm_up_models(),
+                )
+                await tts_service.warm_up_cache()
+                # Heavy: loads embeddings + builds vectorstore
+                from src.agents.langchain_rag_agent import get_rag_agent
+                await asyncio.to_thread(get_rag_agent)
+                logger.info("All warm-up tasks completed ✓")
+            except Exception as e:
+                logger.error(f"Background warm-up error: {e}")
+
+        asyncio.create_task(_background_warmup())
+
+        logger.info("EchoAI Voice Chat API started (warm-up running in background)")
         
     except Exception as e:
         logger.error(f"Failed to start API: {str(e)}")
@@ -109,24 +127,56 @@ async def shutdown_event():
 
 @app.get("/")
 async def root():
-    """Root endpoint with basic info."""
     return {
         "name": "EchoAI Voice Chat API",
         "version": "1.0.0",
         "description": "Real-time AI voice chat with STT→LLM→TTS pipeline",
         "status": "running",
         "active_connections": len(manager.active_connections),
-        "frontend_url": "/static/index.html"
     }
 
-@app.get("/frontend")
-@app.head("/frontend")
-async def serve_frontend():
-    """Serve the frontend HTML file."""
-    if frontend_path.exists():
-        return FileResponse(str(frontend_path / "index.html"))
-    else:
-        raise HTTPException(status_code=404, detail="Frontend not found")
+
+@app.post(APIRoute.CHAT, response_model=ChatResponse)
+async def chat(req: ChatRequest):
+    session_id = req.session_id or str(uuid.uuid4())
+    try:
+        rag_result = await voice_pipeline.rag_agent.process_query(
+            req.message, session_id
+        )
+        if "error" in rag_result:
+            raise HTTPException(status_code=500, detail=rag_result["error"])
+
+        return ChatResponse(
+            response=rag_result["response_text"],
+            session_id=session_id,
+            source=rag_result.get("source", "pipeline"),
+            cached=rag_result.get("cached", False),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(APIRoute.PERSONA)
+async def persona():
+    return {
+        "name": "Ateet Vatan Bahmani",
+        "title": "AI Engineer | LLM Integration & AI Automation Expert",
+        "bio": (
+            "AI Engineer based in Essen, Germany, specializing in LLM integration, "
+            "AI workflow automation, LangChain development, AutoGen multi-agent systems, "
+            "and AI system design."
+        ),
+        "location": "Essen, Germany",
+        "links": {
+            "linkedin": "https://www.linkedin.com/in/ateet-vatan-bahmani/",
+            "github": "https://github.com/AteetVatan",
+            "portfolio": "https://ateetai.vercel.app/",
+            "email": "ab@masxai.com",
+        },
+    }
 
 
 @app.get("/health")

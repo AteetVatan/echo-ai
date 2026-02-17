@@ -40,12 +40,25 @@ class Settings(BaseSettings):
     TTS_STREAMING: bool = Field(True, env="TTS_STREAMING")
     TTS_CACHE_ENABLED: bool = Field(True, env="TTS_CACHE_ENABLED")
     
+    # Self-Info RAG Knowledge Base
+    EMBEDDING_MODEL: str = Field("all-MiniLM-L6-v2", env="EMBEDDING_MODEL")
+    SELF_INFO_JSON_PATH: str = Field("src/documents/self_info.json", env="SELF_INFO_JSON_PATH")
+    SELF_INFO_CHROMA_DIR: str = Field("src/db/self_info_knowledge_v2", env="SELF_INFO_CHROMA_DIR")
+    SELF_INFO_REBUILD: bool = Field(False, env="SELF_INFO_REBUILD")
+    EVIDENCE_DOCS_DIR: str = Field("rag_persona_db/document", env="EVIDENCE_DOCS_DIR")
+    
+    # Reply Cache Vector Store
+    REPLY_CACHE_CHROMA_DIR: str = Field("src/db/chroma_db", env="REPLY_CACHE_CHROMA_DIR")
+    
     # Supabase DB
     SUPABASE_URL: str = Field(..., env="SUPABASE_URL")
     SUPABASE_ANON_KEY: str = Field(..., env="SUPABASE_ANON_KEY")
     SUPABASE_SERVICE_ROLE_KEY: str = Field(..., env="SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_DB_PASSWORD: str = Field(..., env="SUPABASE_DB_PASSWORD")
     SUPABASE_DB_URL: str = Field(..., env="SUPABASE_DB_URL")
+    
+    # HuggingFace Configuration
+    HF_TOKEN: str = Field("", env="HF_TOKEN")
     
     # Server Configuration
     HOST: str = Field("0.0.0.0", env="HOST")
@@ -66,6 +79,11 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+    
+    def model_post_init(self, __context):
+        """Inject HF_TOKEN into os.environ so HuggingFace libraries can find it."""
+        if self.HF_TOKEN:
+            os.environ["HF_TOKEN"] = self.HF_TOKEN
 
 
 # Global settings instance
