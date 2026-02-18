@@ -304,50 +304,8 @@ class LangChainRAGAgent:
     
     # -----------------------------------------------------------------------
     # Query expansion for short / misspelled inputs
+    # Regex rules + LLM fallback live in src.agents.query_expansions
     # -----------------------------------------------------------------------
-
-    # Each pair: (compiled regex, expanded question sent to the retriever)
-    _QUERY_EXPANSIONS: list = [
-        (re.compile(r"work.*exp", re.I),
-         "What is Ateet's complete work experience and employment history?"),
-        (re.compile(r"\b(career|jobs?|employ)", re.I),
-         "What is Ateet's career history and employment timeline?"),
-        (re.compile(r"\bskills?\b", re.I),
-         "What are Ateet's technical skills and tech stack?"),
-        (re.compile(r"\beducat", re.I),
-         "What is Ateet's education and academic background?"),
-        (re.compile(r"\bproject", re.I),
-         "What projects has Ateet worked on?"),
-        (re.compile(r"\bcertif", re.I),
-         "What certifications does Ateet have?"),
-        (re.compile(r"\b(about|who|intro)", re.I),
-         "Tell me about Ateet Vatan Bahmani — his background, role, and expertise."),
-        (re.compile(r"\b(contact|email|phone|reach)", re.I),
-         "What are Ateet's contact details and how can I reach him?"),
-        (re.compile(r"\b(locat|city|countr|where.*live|based)", re.I),
-         "Where is Ateet located?"),
-        (re.compile(r"\b(hobb|interest|personal)", re.I),
-         "What are Ateet's hobbies and personal interests?"),
-    ]
-
-    def _expand_query(self, user_text: str) -> str:
-        """Expand short / keyword queries into full questions for retrieval.
-
-        If the query already looks like a proper sentence (≥5 words) it is
-        returned unchanged.  Otherwise we check against common topic patterns
-        and return a richer retrieval query while logging the expansion.
-        """
-        words = user_text.strip().split()
-        if len(words) >= 5:
-            return user_text  # already a full question
-
-        for pattern, expansion in self._QUERY_EXPANSIONS:
-            if pattern.search(user_text):
-                logger.info("Query expanded: '%s' → '%s'", user_text, expansion)
-                return expansion
-
-        # No pattern matched — return as-is
-        return user_text
 
     async def process_query(self, user_text: str, session_id: str = None) -> Dict[str, Any]:
         """
@@ -396,7 +354,10 @@ class LangChainRAGAgent:
                     # better embedding-based retrieval.  The RAG prompt still
                     # receives the *original* user_text, but the retriever
                     # sees the expanded version so it pulls richer context.
-                    retrieval_query = self._expand_query(user_text)
+                    from src.agents.query_expansions import expand_query
+                    retrieval_query = await expand_query(
+                        user_text, llm=self.primary_llm
+                    )
 
                     rag_response = self.rag_chain.invoke({"query": retrieval_query})
                     response_text = rag_response["result"]
