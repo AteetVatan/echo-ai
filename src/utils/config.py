@@ -50,12 +50,12 @@ class Settings(BaseSettings):
     # Reply Cache Vector Store
     REPLY_CACHE_CHROMA_DIR: str = Field("src/db/chroma_db", env="REPLY_CACHE_CHROMA_DIR")
     
-    # Supabase DB
-    SUPABASE_URL: str = Field(..., env="SUPABASE_URL")
-    SUPABASE_ANON_KEY: str = Field(..., env="SUPABASE_ANON_KEY")
-    SUPABASE_SERVICE_ROLE_KEY: str = Field(..., env="SUPABASE_SERVICE_ROLE_KEY")
-    SUPABASE_DB_PASSWORD: str = Field(..., env="SUPABASE_DB_PASSWORD")
-    SUPABASE_DB_URL: str = Field(..., env="SUPABASE_DB_URL")
+    # Supabase DB (optional — app falls back to local SQLite if not set)
+    SUPABASE_URL: str = Field("", env="SUPABASE_URL")
+    SUPABASE_ANON_KEY: str = Field("", env="SUPABASE_ANON_KEY")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field("", env="SUPABASE_SERVICE_ROLE_KEY")
+    SUPABASE_DB_PASSWORD: str = Field("", env="SUPABASE_DB_PASSWORD")
+    SUPABASE_DB_URL: str = Field("", env="SUPABASE_DB_URL")
     
     # HuggingFace Configuration
     HF_TOKEN: str = Field("", env="HF_TOKEN")
