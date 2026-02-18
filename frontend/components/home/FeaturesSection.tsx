@@ -89,14 +89,14 @@ const features = [
 
 export function FeaturesSection() {
     return (
-        <section className="relative mx-auto max-w-7xl px-6 py-24">
+        <section className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
             {/* Ambient glow */}
             <div className="pointer-events-none absolute left-1/2 top-0 h-64 w-96 -translate-x-1/2 rounded-full opacity-10 blur-[120px]"
                 style={{ background: "var(--color-violet)" }} />
 
             <div className="relative z-10">
                 <div className="mb-14 text-center">
-                    <h2 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                    <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
                         <span className="gradient-text-pink">How It Works</span>
                     </h2>
                     <p className="text-[var(--color-text-muted)]">
@@ -108,7 +108,7 @@ export function FeaturesSection() {
                     {features.map((f) => (
                         <div
                             key={f.title}
-                            className="glass-card group relative overflow-hidden p-6"
+                            className="glass-card group relative overflow-hidden p-4 sm:p-6"
                         >
                             {/* Top row: icon + metric */}
                             <div className="mb-4 flex items-start justify-between">

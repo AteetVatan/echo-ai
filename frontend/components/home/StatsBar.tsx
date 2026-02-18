@@ -90,11 +90,11 @@ const stats = [
 export function StatsBar() {
     return (
         <section className="mx-auto max-w-7xl px-6 py-16">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 {stats.map((s) => (
                     <div
                         key={s.label}
-                        className="glass-card group relative overflow-hidden px-5 py-5"
+                        className="glass-card group relative overflow-hidden px-4 py-4 sm:px-5 sm:py-5"
                     >
                         {/* Icon */}
                         <div
@@ -109,7 +109,7 @@ export function StatsBar() {
                         </div>
 
                         {/* Metric */}
-                        <div className="mb-1 text-2xl font-bold tracking-tight" style={{ color: s.color }}>
+                        <div className="mb-1 text-xl font-bold tracking-tight sm:text-2xl" style={{ color: s.color }}>
                             {s.value}
                         </div>
                         <div className="mb-1 text-sm font-medium text-[var(--color-text)]">

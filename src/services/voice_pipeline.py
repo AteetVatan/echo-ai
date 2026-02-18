@@ -501,13 +501,14 @@ class VoicePipeline:
             log_error_with_context(logger, e, {"session_id": session_id})
             return result
     
-    async def process_text_input(self, text: str, session_id: str = None) -> PipelineResult:
+    async def process_text_input(self, text: str, session_id: str = None, skip_tts: bool = False) -> PipelineResult:
         """
         Process text input through RAG→TTS pipeline.
         
         Args:
             text: Input text to process
             session_id: Session identifier for tracking
+            skip_tts: If True, skip TTS synthesis (chat-only mode)
             
         Returns:
             PipelineResult with text processing results
@@ -520,7 +521,7 @@ class VoicePipeline:
             self.current_session_id = session_id
             self.performance_stats["total_requests"] += 1
             
-            logger.info(f"Processing text input for session {session_id}")
+            logger.info(f"Processing text input for session {session_id} (skip_tts={skip_tts})")
             
             # Stage 1: RAG Agent Processing with Semantic Cache
             rag_start = time.time()
@@ -540,8 +541,8 @@ class VoicePipeline:
                 result.rag_used = rag_result.get("source") == PipelineSource.AGENT
                 result.source = rag_result.get("source", PipelineSource.PIPELINE)
                 
-                # If we got a cached audio file, load it and return early
-                if result.semantic_cache_hit and "audio_file_path" in rag_result:
+                # If we got a cached audio file and TTS is not skipped, load it and return early
+                if not skip_tts and result.semantic_cache_hit and "audio_file_path" in rag_result:
                     cached_audio = await self._load_cached_audio(rag_result["audio_file_path"])
                     if cached_audio:
                         result.audio_data = cached_audio
@@ -565,51 +566,57 @@ class VoicePipeline:
                 self._update_stats(result.pipeline_latency, False)
                 return result
             
-            # Stage 2: TTS Speech Synthesis
-            tts_start = time.time()
-            try:
-                tts_result = await tts_service.synthesize_speech(result.response_text)
-                result.tts_latency = time.time() - tts_start
-                
-                if "error" in tts_result:
-                    result.error = tts_result["error"]
+            # Stage 2: TTS Speech Synthesis (skipped in chat-only mode)
+            if not skip_tts:
+                tts_start = time.time()
+                try:
+                    tts_result = await tts_service.synthesize_speech(result.response_text)
+                    result.tts_latency = time.time() - tts_start
+                    
+                    if "error" in tts_result:
+                        result.error = tts_result["error"]
+                        result.pipeline_latency = time.time() - pipeline_start
+                        self._update_stats(result.pipeline_latency, False)
+                        return result
+                    
+                    result.audio_data = tts_result["audio_data"]
+                    result.cached = tts_result.get("cached", False)
+                    
+                    # Generate audio file path and save
+                    result.audio_file_path = self._generate_audio_file_path(session_id)
+                    await self._save_audio_file(result.audio_data, result.audio_file_path)
+                    
+                except Exception as e:
+                    result.error = f"TTS processing failed: {str(e)}"
+                    result.tts_latency = time.time() - tts_start
                     result.pipeline_latency = time.time() - pipeline_start
                     self._update_stats(result.pipeline_latency, False)
                     return result
                 
-                result.audio_data = tts_result["audio_data"]
-                result.cached = tts_result.get("cached", False)
-                
-                # Generate audio file path and save
-                result.audio_file_path = self._generate_audio_file_path(session_id)
-                await self._save_audio_file(result.audio_data, result.audio_file_path)
-                
-            except Exception as e:
-                result.error = f"TTS processing failed: {str(e)}"
-                result.tts_latency = time.time() - tts_start
-                result.pipeline_latency = time.time() - pipeline_start
-                self._update_stats(result.pipeline_latency, False)
-                return result
-            
-            # Stage 3: Store interaction in cache for future semantic reuse
-            try:
-                await self.rag_agent.store_interaction(
-                    text, 
-                    result.response_text, 
-                    result.audio_file_path
-                )
-            except Exception as e:
-                logger.warning(f"Failed to store text interaction in cache: {str(e)}")
+                # Stage 3: Store interaction in cache for future semantic reuse
+                try:
+                    await self.rag_agent.store_interaction(
+                        text, 
+                        result.response_text, 
+                        result.audio_file_path
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store text interaction in cache: {str(e)}")
             
             # Finalize results
             result.pipeline_latency = time.time() - pipeline_start
-            result.models_used = {
-                "rag": ModelName.AGNO_AGENT,
-                "tts": tts_result.get("model", ModelName.UNKNOWN)
-            }
+            if not skip_tts:
+                result.models_used = {
+                    "rag": ModelName.AGNO_AGENT,
+                    "tts": tts_result.get("model", ModelName.UNKNOWN)
+                }
+            else:
+                result.models_used = {
+                    "rag": ModelName.AGNO_AGENT,
+                }
             
             self._update_stats(result.pipeline_latency, True)
-            logger.info(f"Text processing completed in {result.pipeline_latency:.3f}s")
+            logger.info(f"Text processing completed in {result.pipeline_latency:.3f}s (skip_tts={skip_tts})")
             
             return result
             

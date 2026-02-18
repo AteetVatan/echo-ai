@@ -27,6 +27,10 @@
 - [RAG Pipeline Flow Diagram](#-rag-pipeline-flow-diagram)
 - [Agent Collaboration Workflow](#-agent-collaboration-workflow)
 - [Service Layer Architecture](#-service-layer-architecture)
+- [Design Patterns](#-design-patterns)
+- [Frontend Architecture](#-frontend-architecture)
+- [Exception Hierarchy](#-exception-hierarchy)
+- [WebSocket Protocol Diagram](#-websocket-protocol-diagram)
 - [Technology Stack](#-technology-stack)
 - [Project Structure](#-project-structure)
 - [How It Works](#-how-it-works)
@@ -105,11 +109,13 @@ This project pushes the boundaries of what's possible in human-AI communication,
 - **Supabase PostgreSQL** for cloud-based persistent storage with connection pooling (`asyncpg`)
 - **ChromaDB** as vector database for semantic search (persisted to disk)
 
-### 🖥️ Frontend Web Client
-- **Single-page HTML/JS application** served directly by FastAPI
+### 🖥️ Frontend Web Client (Next.js 16)
+- **Next.js 16 + React 19 + TypeScript 5** — modern App Router with server/client components
+- **Tailwind CSS 4** — utility-first responsive styling with glassmorphism and micro-animations
+- **12 TSX components** across 3 domains: Chat (ChatContainer, ChatInput, MessageBubble, TypingIndicator), Home (HeroSection, FeaturesSection, StatsBar, AIVisualization, NeuralBackground), Layout (Header, Footer, LayoutShell)
+- **Custom `useChat` hook** — encapsulates WebSocket lifecycle, message state, audio recording/playback, and voice toggle
 - **Real-time WebSocket** communication with visual status indicators
-- **Audio recording & playback** with streaming support
-- **Text chat** as an alternative input mode
+- **Responsive design** — optimised for mobile (320px–768px), tablet (768px–1024px), and desktop
 
 ---
 
@@ -531,10 +537,275 @@ sequenceDiagram
 
 ---
 
+## 🧩 Design Patterns
+
+EchoAI employs several well-known software design patterns to achieve modularity, resilience, and performance.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/design_patterns.mmd`](docs/diagrams/design_patterns.mmd)
+
+| Pattern | Implementation | Purpose |
+|---------|---------------|---------|
+| **Pipeline** | `VoicePipeline` | Chains STT → RAG → LLM → TTS as sequential stages; each stage is independently replaceable |
+| **Strategy** | `STTService`, `LLMService` | Runtime selection between primary (Faster-Whisper / DeepSeek) and fallback (OpenAI Whisper / Mistral) providers — swap without changing callers |
+| **Repository** | `DBOperations`, `DBOperationsPostgres`, `SelfInfoVectorStore` | Abstracts storage behind a uniform interface (SQLite, PostgreSQL, ChromaDB) |
+| **Facade** | `SelfInfoRAG` | Exposes a single `query()` entrypoint that internally orchestrates `QueryRouter`, `SelfInfoRetriever`, `SelfInfoVectorStore`, and `EvidenceLoader` |
+| **Observer** | `ConnectionManager` | Manages N WebSocket connections; broadcasts events and handles per-session lifecycle |
+| **Cache-Aside** | `ReplyCacheManager`, `TTSService` | Four-level cache hierarchy (In-Memory LRU → MD5 Hash → Semantic → TTS Disk) each checked before computation |
+| **Chain of Responsibility** | `QueryRouter` | Classifies queries into `factual`, `evidence`, `timeline`, or `default` routes — each handler tries its index before forwarding |
+| **Template Method** | `EchoAIError` hierarchy | Base exception defines the contract; `STTError`, `LLMError`, `TTSError`, etc. specialise the error type |
+
+```mermaid
+flowchart LR
+    subgraph "Pipeline Pattern"
+        PP1["VoicePipeline"]
+        PP2["STT → RAG → LLM → TTS"]
+        PP1 --> PP2
+    end
+
+    subgraph "Strategy Pattern"
+        SP1["STT Strategy"]
+        SP2["Faster-Whisper"]
+        SP3["OpenAI Whisper"]
+        SP4["LLM Strategy"]
+        SP5["DeepSeek AI"]
+        SP6["Mistral AI"]
+        SP1 --> SP2 & SP3
+        SP4 --> SP5 & SP6
+    end
+
+    subgraph "Facade Pattern"
+        FP1["SelfInfoRAG"]
+        FP2["QueryRouter"]
+        FP3["SelfInfoRetriever"]
+        FP4["SelfInfoVectorStore"]
+        FP5["EvidenceLoader"]
+        FP1 --> FP2 & FP3 & FP4 & FP5
+    end
+
+    subgraph "Cache-Aside Pattern"
+        CP1["L1: In-Memory LRU"]
+        CP2["L2: MD5 Hash — SQLite"]
+        CP3["L3: Semantic — ChromaDB"]
+        CP4["L4: TTS Audio Disk"]
+        CP1 --> CP2 --> CP3 --> CP4
+    end
+
+    subgraph "Chain of Responsibility"
+        CR1["QueryRouter"]
+        CR2["Factual → Facts Index"]
+        CR3["Evidence → Evidence Index"]
+        CR4["Timeline → Both Indices"]
+        CR1 --> CR2 & CR3 & CR4
+    end
+```
+
+---
+
+## 🌐 Frontend Architecture
+
+The frontend is a **Next.js 16** application using the **App Router**, **React 19**, **TypeScript 5**, and **Tailwind CSS 4**. All real-time communication flows through a custom `useChat` hook that manages WebSocket lifecycle, message state, and audio recording/playback.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/frontend_architecture.mmd`](docs/diagrams/frontend_architecture.mmd)
+
+### Component Hierarchy
+
+```mermaid
+flowchart TD
+    subgraph "Next.js App Router"
+        LAYOUT["layout.tsx — RootLayout"]
+        SHELL["LayoutShell — Header + Footer wrapper"]
+        HOME_PAGE["page.tsx — Landing Page"]
+        CHAT_PAGE["chat/page.tsx — Chat Page"]
+        ERROR["error.tsx — Error Boundary"]
+    end
+
+    subgraph "Landing Page Components"
+        HERO["HeroSection — CTA + Animated text"]
+        FEATURES["FeaturesSection — Feature cards grid"]
+        STATS["StatsBar — Live statistics counters"]
+        NEURAL["NeuralBackground — Canvas particle animation"]
+        AIVIZ["AIVisualization — 3D-style AI visual"]
+    end
+
+    subgraph "Chat Components"
+        CONTAINER["ChatContainer — Main chat orchestrator"]
+        INPUT["ChatInput — Text + voice input bar"]
+        BUBBLE["MessageBubble — User/AI message display"]
+        TYPING["TypingIndicator — AI thinking animation"]
+    end
+
+    subgraph "Shared Layout"
+        HEADER["Header — Navigation + branding"]
+        FOOTER["Footer — Links + credits"]
+    end
+
+    subgraph "Data Layer"
+        HOOK["useChat Hook — WebSocket + state management"]
+        API_LIB["lib/api.ts — API base URL config"]
+        TYPES["lib/types.ts — TypeScript interfaces"]
+    end
+
+    subgraph "Backend Connection"
+        WS["WebSocket ws://host:8000/ws/{sessionId}"]
+        REST["REST API http://host:8000/api/*"]
+    end
+
+    LAYOUT --> SHELL
+    SHELL --> HEADER & FOOTER
+    LAYOUT --> HOME_PAGE & CHAT_PAGE & ERROR
+
+    HOME_PAGE --> HERO & FEATURES & STATS
+    HOME_PAGE --> NEURAL & AIVIZ
+
+    CHAT_PAGE --> CONTAINER
+    CONTAINER --> INPUT & BUBBLE & TYPING
+    CONTAINER --> HOOK
+
+    HOOK --> WS
+    HOOK --> API_LIB
+    HOOK --> TYPES
+    API_LIB --> REST
+```
+
+### Frontend Technology Stack
+
+| Layer | Technology | Details |
+|-------|-----------|---------|
+| **Framework** | Next.js 16.1.6 | App Router with server/client components |
+| **Rendering** | React 19.2.3 | Concurrent features, server components |
+| **Language** | TypeScript 5 | Full type safety across components |
+| **Styling** | Tailwind CSS 4 | Utility-first with glassmorphism effects |
+| **State** | `useChat` custom hook | WebSocket, messages, audio, voice toggle |
+| **Build** | PostCSS + SWC | Lightning-fast compilation |
+| **Linting** | ESLint 9 (flat config) | `eslint-config-next` rule set |
+
+---
+
+## 🚨 Exception Hierarchy
+
+All service, agent, and pipeline code raises typed exceptions from a single hierarchy rooted in `EchoAIError`. Callers catch specific subtypes to implement fallback behaviour.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/exception_hierarchy.mmd`](docs/diagrams/exception_hierarchy.mmd)
+
+```mermaid
+classDiagram
+    class EchoAIError {
+        <<Base Exception>>
+        Base exception for all EchoAI errors
+    }
+
+    class STTError {
+        Speech-to-Text processing failure
+    }
+
+    class LLMError {
+        Language-model generation failure
+    }
+
+    class TTSError {
+        Text-to-Speech synthesis failure
+    }
+
+    class RAGError {
+        RAG retrieval or agent failure
+    }
+
+    class PipelineError {
+        Voice-pipeline orchestration failure
+    }
+
+    class DatabaseError {
+        Database operation failure
+    }
+
+    class AudioProcessingError {
+        Audio conversion / processing failure
+    }
+
+    EchoAIError <|-- STTError
+    EchoAIError <|-- LLMError
+    EchoAIError <|-- TTSError
+    EchoAIError <|-- RAGError
+    EchoAIError <|-- PipelineError
+    EchoAIError <|-- DatabaseError
+    EchoAIError <|-- AudioProcessingError
+```
+
+---
+
+## 📡 WebSocket Protocol Diagram
+
+Visual diagram of the full WebSocket message lifecycle — connection, audio modes, text chat, and keep-alive.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/websocket_protocol.mmd`](docs/diagrams/websocket_protocol.mmd)
+
+```mermaid
+sequenceDiagram
+    participant Client as Web Client
+    participant WS as WebSocket Server
+    participant CM as ConnectionManager
+    participant VP as VoicePipeline
+    participant RAG as RAG Agent
+
+    Note over Client,RAG: Connection Lifecycle
+
+    Client->>WS: Connect ws://host:8000/ws/{session_id}
+    WS->>CM: connect(websocket, session_id)
+    CM-->>Client: {"type": "connection", "status": "connected"}
+
+    Note over Client,RAG: Complete Audio Mode
+
+    Client->>WS: {"type": "audio", "data": "base64..."}
+    WS->>VP: process_voice_input(audio_data)
+    VP->>VP: STT → Text
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Streaming Audio Mode
+
+    Client->>WS: {"type": "start_streaming"}
+    WS->>CM: set_streaming_status(true)
+    WS-->>Client: {"type": "streaming_started"}
+
+    loop Audio Chunks
+        Client->>WS: {"type": "audio_chunk", "data": "base64..."}
+        WS->>CM: add_audio_chunk(session_id, chunk)
+        WS-->>Client: {"type": "chunk_received"}
+    end
+
+    Client->>WS: {"type": "stop_streaming"}
+    WS->>CM: get_audio_buffer(session_id)
+    WS->>VP: process_streaming_voice(chunks)
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Text Chat Mode
+
+    Client->>WS: {"type": "text", "text": "Hello"}
+    WS->>VP: process_text_input(text)
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Keep-Alive
+
+    Client->>WS: {"type": "ping"}
+    WS-->>Client: {"type": "pong"}
+```
+
+---
+
 ## 🧰 Technology Stack
 
 | Category | Technology | Purpose |
 |----------|-----------|---------|
+| **Frontend Framework** | Next.js 16.1.6 (App Router) | React-based SSR/SSG framework |
+| **UI Library** | React 19.2.3 + React DOM | Component-based UI rendering |
+| **Language (Frontend)** | TypeScript 5 | Static typing for frontend code |
+| **Styling** | Tailwind CSS 4 | Utility-first CSS framework |
 | **Web Framework** | FastAPI 0.104+ | REST API + WebSocket server |
 | **Primary LLM** | DeepSeek AI (`deepseek-chat`) | Main language model for response generation |
 | **Fallback LLM** | Mistral AI (`mistral-large-latest`) | Fallback language model |
@@ -550,6 +821,7 @@ sequenceDiagram
 | **Audio Processing** | soundfile, imageio-ffmpeg, av | Audio I/O, format conversion |
 | **Config** | Pydantic Settings + python-dotenv | Typed settings from `.env` |
 | **HTTP** | aiohttp, httpx | Async HTTP client calls |
+| **Linting** | ESLint 9 + eslint-config-next | Frontend code quality |
 | **Containerization** | Docker | Production deployment |
 
 ---
@@ -565,7 +837,7 @@ EchoAI/
 ├── run_dev.py                           # Development startup script
 ├── main_debug_no_ws.py                  # Debug mode without WebSocket
 │
-├── src/                                 # Source code root
+├── src/                                 # Backend source code root
 │   ├── __init__.py                      # Package init (version, author)
 │   ├── constants.py                     # Enums & numeric thresholds
 │   ├── exceptions.py                    # Typed exception hierarchy
@@ -584,7 +856,8 @@ EchoAI/
 │   │
 │   ├── agents/                          # Agent layer
 │   │   ├── __init__.py
-│   │   └── langchain_rag_agent.py       # LangChain RAG agent, reply cache manager
+│   │   ├── langchain_rag_agent.py       # LangChain RAG agent, reply cache manager
+│   │   └── query_expansions.py         # Query expansion synonym lists
 │   │
 │   ├── knowledge/                       # ⭐ Self-Info RAG knowledge layer
 │   │   ├── __init__.py
@@ -622,9 +895,46 @@ EchoAI/
 │           ├── audio_stream_processor.py # Real-time stream processing
 │           └── audio_utils.py           # Shared audio helpers
 │
-├── frontend/                            # Web client
-│   ├── index.html                       # Single-page UI (22KB)
-│   └── script.js                        # WebSocket client logic (32KB)
+├── frontend/                            # 🌐 Next.js 16 Web Client
+│   ├── package.json                     # Dependencies (Next 16, React 19, Tailwind 4)
+│   ├── tsconfig.json                    # TypeScript configuration
+│   ├── next.config.ts                   # Next.js configuration
+│   ├── postcss.config.mjs               # PostCSS + Tailwind CSS config
+│   ├── eslint.config.mjs                # ESLint 9 flat config
+│   │
+│   ├── app/                             # Next.js App Router pages
+│   │   ├── layout.tsx                   # Root layout (HTML, fonts, metadata)
+│   │   ├── page.tsx                     # Landing page (/)
+│   │   ├── globals.css                  # Global styles & Tailwind directives
+│   │   ├── error.tsx                    # Error boundary component
+│   │   └── chat/
+│   │       └── page.tsx                 # Chat page (/chat)
+│   │
+│   ├── components/                      # React components
+│   │   ├── chat/                        # Chat UI components
+│   │   │   ├── ChatContainer.tsx        # Main chat orchestrator
+│   │   │   ├── ChatInput.tsx            # Text & voice input bar
+│   │   │   ├── MessageBubble.tsx        # User/AI message display
+│   │   │   └── TypingIndicator.tsx      # AI thinking animation
+│   │   ├── home/                        # Landing page components
+│   │   │   ├── HeroSection.tsx          # CTA + animated headline
+│   │   │   ├── FeaturesSection.tsx      # Feature cards grid
+│   │   │   ├── StatsBar.tsx             # Live statistics counters
+│   │   │   ├── AIVisualization.tsx       # 3D-style AI visual
+│   │   │   └── NeuralBackground.tsx     # Canvas particle animation
+│   │   └── layout/                      # Shared layout components
+│   │       ├── Header.tsx               # Navigation + branding
+│   │       ├── Footer.tsx               # Links + credits
+│   │       └── LayoutShell.tsx          # Header + Footer wrapper
+│   │
+│   ├── hooks/                           # Custom React hooks
+│   │   └── useChat.ts                   # WebSocket + chat state management
+│   │
+│   ├── lib/                             # Shared utilities
+│   │   ├── api.ts                       # API base URL configuration
+│   │   └── types.ts                     # TypeScript interfaces
+│   │
+│   └── public/                          # Static assets
 │
 ├── tests/                               # Unit & smoke tests
 │   ├── test_self_info_loader.py          # SelfInfoLoader validation tests
@@ -640,7 +950,9 @@ EchoAI/
 │   ├── agent_collaboration.mmd           # Agent collaboration workflow
 │   ├── websocket_protocol.mmd           # WebSocket message protocol
 │   ├── caching_strategy.mmd             # Multi-level caching strategy
-│   └── exception_hierarchy.mmd          # Exception class hierarchy
+│   ├── exception_hierarchy.mmd          # Exception class hierarchy
+│   ├── frontend_architecture.mmd        # Next.js component hierarchy
+│   └── design_patterns.mmd              # Design patterns overview
 │
 ├── audio_cache/                         # Cached TTS audio files (*.mp3)
 │

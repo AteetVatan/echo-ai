@@ -73,7 +73,10 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background: url("/profile.jpg") 75% top / auto 100% no-repeat;
+  background-image: url("/profile.jpg");
+  background-size: cover;
+  background-position: 75% top;
+  background-repeat: no-repeat;
 }
 
 /* Dark overlay for readability */
@@ -291,4 +294,126 @@ body::after {
 
 .glow-ring:hover::before {
   opacity: 1;
+}
+
+/* ── Voice state animations ── */
+@keyframes wave-bar {
+
+  0%,
+  100% {
+    height: 4px;
+  }
+
+  50% {
+    height: 20px;
+  }
+}
+
+@keyframes speak-bar {
+
+  0%,
+  100% {
+    height: 6px;
+  }
+
+  25% {
+    height: 16px;
+  }
+
+  75% {
+    height: 10px;
+  }
+}
+
+@keyframes think-progress {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes mic-breathe-ring {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 206, 201, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 206, 201, 0);
+  }
+}
+
+@keyframes interrupt-flash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+.animate-wave-bar {
+  animation: wave-bar 0.8s ease-in-out infinite;
+}
+
+.animate-speak-bar {
+  animation: speak-bar 1s ease-in-out infinite;
+}
+
+.animate-think-progress {
+  animation: think-progress 1.5s ease-in-out infinite;
+}
+
+.animate-mic-breathe {
+  animation: mic-breathe-ring 2s ease-in-out infinite;
+}
+
+/* ── Mobile Responsive Overrides ── */
+
+/* Small screens: background & performance */
+@media (max-width: 767px) {
+  body::before {
+    background-position: center top;
+  }
+
+  body::after {
+    background: linear-gradient(180deg,
+        rgba(11, 13, 23, 0.8) 0%,
+        rgba(11, 13, 23, 0.92) 40%,
+        rgba(11, 13, 23, 0.98) 100%);
+  }
+
+  /* Reduce blur for GPU performance on mobile */
+  .glass-panel {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .glass-card {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* Hide scrollbar on touch devices */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Disable hover transforms on touch devices */
+@media (hover: none) {
+  .glass-card:hover {
+    transform: none;
+  }
 }

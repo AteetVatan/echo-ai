@@ -9,7 +9,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
 
     return (
         <>
-            <main className={isChatPage ? "pt-16" : "min-h-screen"}>
+            <main className={isChatPage ? "pt-14 sm:pt-16" : "min-h-screen"}>
                 {children}
             </main>
             {!isChatPage && <Footer />}

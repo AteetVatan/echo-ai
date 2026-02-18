@@ -12,15 +12,15 @@ export function HeroSection() {
             </div>
 
             {/* Ambient glow orbs */}
-            <div className="pointer-events-none absolute -top-32 left-1/6 h-80 w-80 rounded-full opacity-20 blur-[120px]"
+            <div className="pointer-events-none absolute -top-32 left-1/6 h-48 w-48 rounded-full opacity-20 blur-[80px] sm:h-80 sm:w-80 sm:blur-[120px]"
                 style={{ background: "var(--color-pink)" }} />
-            <div className="pointer-events-none absolute -bottom-20 right-1/4 h-64 w-64 rounded-full opacity-15 blur-[100px]"
+            <div className="pointer-events-none absolute -bottom-20 right-1/4 h-40 w-40 rounded-full opacity-15 blur-[60px] sm:h-64 sm:w-64 sm:blur-[100px]"
                 style={{ background: "var(--color-teal)" }} />
-            <div className="pointer-events-none absolute top-1/3 right-1/6 h-72 w-72 rounded-full opacity-10 blur-[100px]"
+            <div className="pointer-events-none absolute top-1/3 right-1/6 h-48 w-48 rounded-full opacity-10 blur-[60px] sm:h-72 sm:w-72 sm:blur-[100px]"
                 style={{ background: "var(--color-coral)" }} />
 
             {/* Content */}
-            <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center gap-8 px-6 pt-28 lg:pt-32">
+            <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 pt-20 sm:gap-8 sm:px-6 sm:pt-28 lg:pt-32">
                 {/* Left side: text content */}
                 <div className="text-center">
                     {/* Status badge */}
@@ -32,14 +32,14 @@ export function HeroSection() {
                         <span className="text-[var(--color-text-muted)]">RAG-Powered AI Clone — Online</span>
                     </div>
 
-                    <h1 className="mb-6 text-5xl font-bold leading-[1.1] tracking-tight sm:text-6xl lg:text-7xl">
+                    <h1 className="mb-4 text-3xl font-bold leading-[1.1] tracking-tight sm:mb-6 sm:text-5xl lg:text-7xl">
                         <span className="block text-[var(--color-text)]">Talk to</span>
                         <span className="gradient-text-pink">
                             Ateet&apos;s AI Clone
                         </span>
                     </h1>
 
-                    <p className="mx-auto mb-8 max-w-lg text-lg leading-relaxed text-[var(--color-text-muted)]">
+                    <p className="mx-auto mb-6 max-w-lg text-base leading-relaxed text-[var(--color-text-muted)] sm:mb-8 sm:text-lg">
                         A digital twin grounded in real career experience, projects, and expertise.
                         Powered by RAG retrieval, semantic search, and multi-LLM orchestration.
                     </p>

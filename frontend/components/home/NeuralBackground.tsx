@@ -49,7 +49,8 @@ export function NeuralBackground() {
         // Create nodes
         const w = canvas.offsetWidth;
         const h = canvas.offsetHeight;
-        const count = Math.min(Math.floor((w * h) / 12000), 60);
+        const isMobile = w < 768;
+        const count = Math.min(Math.floor((w * h) / (isMobile ? 18000 : 12000)), isMobile ? 30 : 60);
         const nodes: Node[] = [];
         for (let i = 0; i < count; i++) {
             const c = NODE_COLORS[i % NODE_COLORS.length];
@@ -67,7 +68,7 @@ export function NeuralBackground() {
         }
         nodesRef.current = nodes;
 
-        const CONNECTION_DIST = 160;
+        const CONNECTION_DIST = isMobile ? 100 : 160;
         let time = 0;
 
         function draw() {

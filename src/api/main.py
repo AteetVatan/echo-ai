@@ -289,6 +289,12 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     await handle_stop_streaming(session_id, message)
                 elif message_type == WSMessageType.TEXT:
                     await handle_text_message(session_id, message)
+                elif message_type == "clear_history":
+                    # FIX #9: frontend Clear Chat resets server-side context
+                    try:
+                        await voice_pipeline.rag_agent.clear_session_history(session_id)
+                    except Exception:
+                        pass
                 elif message_type == WSMessageType.PING:
                     #Health check 
                     await manager.send_message(session_id, {"type": WSMessageType.PONG})
@@ -310,16 +316,25 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     "message": "Invalid JSON format"
                 })
             except Exception as e:
-                logger.error(f"Error processing message: {str(e)}")
+                err_msg = str(e)
+                # Starlette raises this when the WS is gone — treat as disconnect
+                if "not connected" in err_msg.lower() or "accept" in err_msg.lower():
+                    logger.info(f"WebSocket already closed for {session_id}, disconnecting.")
+                    break
+                logger.error(f"Error processing message: {err_msg}")
                 await manager.send_message(session_id, {
                     "type": WSMessageType.ERROR,
-                    "message": f"Processing error: {str(e)}"
+                    "message": f"Processing error: {err_msg}"
                 })
                 
     except Exception as e:
         logger.error(f"WebSocket error for session {session_id}: {str(e)}")
     finally:
         manager.disconnect(session_id)
+        try:
+            await voice_pipeline.rag_agent.clear_session_history(session_id)
+        except Exception:
+            pass
 
 
 async def handle_audio_message(session_id: str, message: Dict[str, Any]):
@@ -354,8 +369,11 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
             })
             return
         
-        # Encode response audio
-        response_audio_b64 = base64.b64encode(result.audio_data).decode()
+        # FIX T1: Only encode audio if TTS produced data
+        response_audio_b64 = (
+            base64.b64encode(result.audio_data).decode()
+            if result.audio_data else None
+        )
         
         # Send response
         await manager.send_message(session_id, {
@@ -524,8 +542,11 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
             manager.clear_audio_buffer(session_id)
             return
         
-        # Encode response audio
-        response_audio_b64 = base64.b64encode(result.audio_data).decode()
+        # FIX T1: Only encode audio if TTS produced data
+        response_audio_b64 = (
+            base64.b64encode(result.audio_data).decode()
+            if result.audio_data else None
+        )
         
         # Send response with enhanced metadata
         await manager.send_message(session_id, {
@@ -573,6 +594,7 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
     """Handle text message from client."""
     try:
         text = message.get("text", "").strip()
+        voice_mode = message.get("voice_mode", False)
         if not text:
             await manager.send_message(session_id, {
                 "type": WSMessageType.ERROR,
@@ -587,7 +609,7 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         })
         
         # Process text input through pipeline
-        result = await voice_pipeline.process_text_input(text, session_id)
+        result = await voice_pipeline.process_text_input(text, session_id, skip_tts=not voice_mode)
         
         # Check for errors
         if result.error:
@@ -597,8 +619,12 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             })
             return
         
-        # Encode response audio
-        response_audio_b64 = base64.b64encode(result.audio_data).decode()
+        # FIX R3: Only encode audio if TTS produced data
+        response_audio_b64 = (
+            base64.b64encode(result.audio_data).decode()
+            if result.audio_data
+            else None
+        )
         
         # Send response
         await manager.send_message(session_id, {
@@ -647,8 +673,11 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
             })
             return
         
-        # Send immediate response
-        response_audio_b64 = base64.b64encode(result.audio_data).decode()
+        # FIX U1: Only encode audio if TTS produced data
+        response_audio_b64 = (
+            base64.b64encode(result.audio_data).decode()
+            if result.audio_data else None
+        )
         
         await manager.send_message(session_id, {
             "type": WSMessageType.STREAMING_RESPONSE,

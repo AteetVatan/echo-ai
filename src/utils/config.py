@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: float = Field(10.0, env="LLM_TIMEOUT")
     TTS_TIMEOUT: float = Field(8.0, env="TTS_TIMEOUT")
     
+    # Security Configuration
+    ECHOAI_API_KEY: str = Field("", env="ECHOAI_API_KEY")
+    ALLOWED_ORIGINS: str = Field("http://localhost:3000,http://localhost:8000", env="ALLOWED_ORIGINS")
+    RATE_LIMIT_PER_MINUTE: int = Field(30, env="RATE_LIMIT_PER_MINUTE")
+    WS_MSG_RATE_LIMIT: int = Field(20, env="WS_MSG_RATE_LIMIT")
+    MAX_WS_CONNECTIONS_PER_IP: int = Field(5, env="MAX_WS_CONNECTIONS_PER_IP")
+    MAX_TEXT_LENGTH: int = Field(2000, env="MAX_TEXT_LENGTH")
+
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

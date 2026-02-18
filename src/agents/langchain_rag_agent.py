@@ -10,23 +10,22 @@ import re
 import json
 import hashlib
 import time
+import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 from uuid import uuid5, NAMESPACE_URL
 import shutil  # noqa: F401 — kept for ReplyCacheManager compatibility
 
-from src.constants import ChromaCollection
+from src.constants import ChromaCollection, REPLY_CACHE_SIMILARITY_THRESHOLD
 
 # LangChain imports
 
 from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
-from langchain.chains import RetrievalQA
 from langchain.retrievers import EnsembleRetriever
 from langchain_core.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.memory import ConversationBufferMemory
 
 # Mistral integration (fallback)
 try:
@@ -80,17 +79,18 @@ class LangChainRAGAgent:
         # Initialize LLMs (DeepSeek primary, Mistral fallback)
         self.primary_llm, self.fallback_llm = self._setup_llms()
         
-        # Initialize RAG chain
-        self.rag_chain = self._setup_rag_chain()
+        # Initialize RAG chain (sets self.merged_retriever + self.rag_prompt)
+        self.merged_retriever = None
+        self.rag_prompt = None
+        self._setup_rag_chain()
         
         # Initialize reply cache
         self.reply_cache = ReplyCacheManager(self.db_operations, self.vector_store)
         
-        # Initialize memory for conversations
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+        # Per-session conversation history for context-aware follow-ups
+        self.session_histories: Dict[str, list] = {}
+        self.MAX_HISTORY_TURNS = 5
+        self._history_lock = asyncio.Lock()  # FIX #6: thread-safe access
         
         logger.info("LangChain RAG Agent initialized successfully")
     
@@ -257,6 +257,9 @@ class LangChainRAGAgent:
             - NEVER say "I'm an AI assistant" or "I'm DeepSeek" or similar. You ARE Ateet's digital twin.
 
             ---
+            CONVERSATION HISTORY (use for context on follow-up questions):
+            {chat_history}
+
             CONTEXT:
             {context}
 
@@ -268,7 +271,7 @@ class LangChainRAGAgent:
             
             prompt = PromptTemplate(
                 template=prompt_template,
-                input_variables=["context", "question"]
+                input_variables=["context", "chat_history", "question"]
             )
             
             # Create merged retriever from facts + evidence stores
@@ -281,27 +284,67 @@ class LangChainRAGAgent:
                 search_type="similarity",
                 search_kwargs={"k": 5}
             )
-            merged_retriever = EnsembleRetriever(
+            self.merged_retriever = EnsembleRetriever(
                 retrievers=[facts_retriever, evidence_retriever],
                 weights=[0.6, 0.4]  # Favor facts (explicit Q&A) over evidence (raw docs)
             )
             
-            # Create retrieval QA chain using merged retriever
-            rag_chain = RetrievalQA.from_chain_type(
-                llm=self.primary_llm,
-                chain_type="stuff",
-                retriever=merged_retriever,
-                chain_type_kwargs={"prompt": prompt},
-                return_source_documents=True
-            )
+            # Store prompt for manual invocation (enables {chat_history} injection)
+            self.rag_prompt = prompt
             
-            logger.info("RAG chain initialized with merged facts + evidence retriever")
-            return rag_chain
+            logger.info("RAG retriever + prompt initialized (manual invocation mode)")
+            return True
             
         except Exception as e:
             logger.error(f"Failed to setup RAG chain: {str(e)}")
             return None
     
+    # -----------------------------------------------------------------------
+    # Per-session conversation history helpers
+    # -----------------------------------------------------------------------
+
+    async def _get_history_str(self, session_id: str) -> str:
+        """Format recent conversation history as string for prompt injection."""
+        if not session_id or session_id not in self.session_histories:
+            return "No prior conversation."
+        async with self._history_lock:
+            history = self.session_histories[session_id][-self.MAX_HISTORY_TURNS:]
+        return "\n".join(f"User: {u}\nAteet: {a}" for u, a in history)
+
+    async def _store_exchange(self, session_id: str, user_text: str, response_text: str):
+        """Store a conversation exchange. Called at every success return."""
+        if not session_id:
+            return
+        async with self._history_lock:
+            if session_id not in self.session_histories:
+                self.session_histories[session_id] = []
+            self.session_histories[session_id].append((user_text, response_text))
+            # Keep bounded (FIX #7: trim at MAX_HISTORY_TURNS, not 2x)
+            if len(self.session_histories[session_id]) > self.MAX_HISTORY_TURNS:
+                self.session_histories[session_id] = \
+                    self.session_histories[session_id][-self.MAX_HISTORY_TURNS:]
+
+    async def clear_session_history(self, session_id: str):
+        """Called on WebSocket disconnect to free memory."""
+        async with self._history_lock:
+            self.session_histories.pop(session_id, None)
+
+    def _is_contextual_query(self, text: str, session_id: str = None) -> bool:
+        """Detect queries that depend on conversation context (anaphora)."""
+        # FIX R9: Only flag as contextual if there IS prior history to reference
+        # T4: Safe without lock — sync method with no yield points in CPython asyncio
+        if not session_id or session_id not in self.session_histories:
+            return False
+        if not self.session_histories[session_id]:
+            return False
+        words = text.strip().lower().split()
+        if len(words) > 12:
+            return False
+        anaphora = {"more", "else", "that", "those", "this", "these",
+                    "it", "them", "him", "her", "again", "elaborate",
+                    "explain", "detail", "continue", "further"}
+        return bool(set(words) & anaphora)
+
     # -----------------------------------------------------------------------
     # Query expansion for short / misspelled inputs
     # Regex rules + LLM fallback live in src.agents.query_expansions
@@ -309,22 +352,29 @@ class LangChainRAGAgent:
 
     async def process_query(self, user_text: str, session_id: str = None) -> Dict[str, Any]:
         """
-        Process user query through LangChain RAG pipeline.
+        Process user query through LangChain RAG pipeline with conversation context.
         
         Args:
             user_text: User input text
-            session_id: Session identifier
+            session_id: Session identifier for conversation history
             
         Returns:
             Dict with response and metadata
         """
         try:
             start_time = time.time()
+            is_contextual = self._is_contextual_query(user_text, session_id)
             
-            # Step 1: Check reply cache for semantic similarity
-            cached_reply = await self.reply_cache.find_similar_reply(user_text)
-            if cached_reply and cached_reply.similarity_score >= 0.95:
+            # Step 1: Check reply cache (skip for context-dependent follow-ups)
+            if not is_contextual:
+                cached_reply = await self.reply_cache.find_similar_reply(user_text)
+            else:
+                cached_reply = None
+                logger.info(f"Skipping reply cache for contextual query: '{user_text}'")
+            
+            if cached_reply and cached_reply.similarity_score >= REPLY_CACHE_SIMILARITY_THRESHOLD:
                 logger.info(f"Found cached reply with similarity {cached_reply.similarity_score:.3f}")
+                await self._store_exchange(session_id, user_text, cached_reply.response_text)
                 return {
                     "response_text": cached_reply.response_text,
                     "audio_file_path": cached_reply.audio_file_path,
@@ -334,11 +384,8 @@ class LangChainRAGAgent:
                     "processing_time": time.time() - start_time
                 }
             
-            # Step 2: Always try RAG chain when knowledge base is available.
-            # The RAG chain's EnsembleRetriever (k=6+5) handles short,
-            # misspelled, or ambiguous queries far better than a low-k
-            # pre-flight similarity_search gate.
-            if self.self_info_knowledge_base and self.rag_chain:
+            # Step 2: Try RAG when knowledge base is available.
+            if self.self_info_knowledge_base and hasattr(self, 'merged_retriever') and self.merged_retriever:
                 try:
                     # Handle corrupted HNSW index by attempting a quick probe
                     try:
@@ -350,19 +397,40 @@ class LangChainRAGAgent:
                         else:
                             raise
 
-                    # Expand short/ambiguous queries into full questions for
-                    # better embedding-based retrieval.  The RAG prompt still
-                    # receives the *original* user_text, but the retriever
-                    # sees the expanded version so it pulls richer context.
+                    # Context-aware query expansion:
+                    # For follow-ups, prepend last exchange so LLM can resolve anaphora.
                     from src.agents.query_expansions import expand_query
+                    expand_input = user_text
+                    if is_contextual and session_id and session_id in self.session_histories:
+                        # FIX T3: Read history under lock
+                        async with self._history_lock:
+                            last = self.session_histories[session_id][-1]
+                        expand_input = (
+                            f"Previous: {last[0]} → {last[1][:100]}... "
+                            f"| Current: {user_text}"
+                        )
                     retrieval_query = await expand_query(
-                        user_text, llm=self.primary_llm
+                        expand_input, llm=self.primary_llm
                     )
 
-                    rag_response = self.rag_chain.invoke({"query": retrieval_query})
-                    response_text = rag_response["result"]
-                    source_docs = rag_response.get("source_documents", [])
+                    # Manual retrieval + prompt (replacing RetrievalQA chain)
+                    docs = self.merged_retriever.invoke(retrieval_query)
+                    context_str = "\n\n".join(doc.page_content for doc in docs)
+                    history_str = await self._get_history_str(session_id)
+                    prompt_text = self.rag_prompt.format(
+                        context=context_str,
+                        chat_history=history_str,
+                        question=user_text  # ORIGINAL query, not expanded
+                    )
+                    llm_response = self.primary_llm.invoke(prompt_text)
+                    response_text = (
+                        llm_response.content
+                        if hasattr(llm_response, 'content')
+                        else str(llm_response)
+                    )
+                    source_docs = docs
 
+                    await self._store_exchange(session_id, user_text, response_text)
                     return {
                         "response_text": response_text,
                         "cached": False,
@@ -372,8 +440,11 @@ class LangChainRAGAgent:
                         "processing_time": time.time() - start_time
                     }
                 except Exception as rag_error:
-                    logger.error(f"RAG chain failed, using fallback LLM: {str(rag_error)}")
-                    response = await self._direct_llm_response(user_text, use_fallback=True)
+                    logger.error(f"RAG pipeline failed, using fallback LLM: {str(rag_error)}")
+                    response = await self._direct_llm_response(
+                        user_text, session_id=session_id, use_fallback=True
+                    )
+                    await self._store_exchange(session_id, user_text, response)
                     return {
                         "response_text": response,
                         "cached": False,
@@ -385,7 +456,10 @@ class LangChainRAGAgent:
             else:
                 # Self-info knowledge base not available, use direct LLM
                 logger.warning("Self-info knowledge base not available, using direct LLM")
-                response = await self._direct_llm_response(user_text)
+                response = await self._direct_llm_response(
+                    user_text, session_id=session_id
+                )
+                await self._store_exchange(session_id, user_text, response)
                 return {
                     "response_text": response,
                     "cached": False,
@@ -398,7 +472,10 @@ class LangChainRAGAgent:
             logger.error(f"LangChain RAG query processing failed: {str(e)}")
             # Final fallback to direct LLM
             try:
-                response = await self._direct_llm_response(user_text, use_fallback=True)
+                response = await self._direct_llm_response(
+                    user_text, session_id=session_id, use_fallback=True
+                )
+                await self._store_exchange(session_id, user_text, response)
                 return {
                     "response_text": response,
                     "cached": False,
@@ -416,10 +493,10 @@ class LangChainRAGAgent:
                     "processing_time": time.time() - start_time
                 }
     
-    async def _direct_llm_response(self, user_text: str, use_fallback: bool = False) -> str:
-        """Generate direct LLM response when no knowledge is available."""
+    async def _direct_llm_response(self, user_text: str, session_id: str = None, use_fallback: bool = False) -> str:
+        """Generate direct LLM response with conversation history."""
         try:
-            from langchain_core.messages import SystemMessage, HumanMessage
+            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
             
             # Choose LLM based on use_fallback flag
             llm_to_use = self.fallback_llm if use_fallback and self.fallback_llm else self.primary_llm
@@ -434,9 +511,19 @@ class LangChainRAGAgent:
                 "'I don't have specific information about that in my knowledge base.' "
                 "Always respond in English."
             ))
-            human_msg = HumanMessage(content=user_text)
             
-            response = llm_to_use.invoke([system_msg, human_msg])
+            # Inject conversation history for context
+            # FIX T2: Read history under lock for consistency
+            history_messages = []
+            if session_id and session_id in self.session_histories:
+                async with self._history_lock:
+                    history_pairs = self.session_histories[session_id][-self.MAX_HISTORY_TURNS:]
+                for u, a in history_pairs:
+                    history_messages.append(HumanMessage(content=u))
+                    history_messages.append(AIMessage(content=a))
+            
+            human_msg = HumanMessage(content=user_text)
+            response = llm_to_use.invoke([system_msg] + history_messages + [human_msg])
             
             # Extract content from response
             if hasattr(response, 'content'):
@@ -554,7 +641,7 @@ class ReplyCacheManager:
     def __init__(self, db_operations: DBOperations, vector_store: Chroma):
         self.db = db_operations
         self.vector_store = vector_store
-        self.similarity_threshold = 0.85
+        self.similarity_threshold = REPLY_CACHE_SIMILARITY_THRESHOLD
         self._ensure_cache_table()
     
     def _ensure_cache_table(self):
@@ -602,17 +689,20 @@ class ReplyCacheManager:
                     similarity_score=1.0
                 )
             
-            return None # TODO: For now disabeling this feature need to be tested.
             # Semantic search using vector store
             try:
                 docs = self.vector_store.similarity_search_with_score(user_text, k=3)
                 if docs:
                     best_doc, distance = docs[0]  # distance in [0, 2] for cosine
                     cos_sim = 1 - distance                 # cosine similarity in [-1, 1]
-                    sim_0_1 = (cos_sim + 1) / 2           # map to [0, 1] for UI/thresholds
-                    sim_percent = round(sim_0_1 * 100, 2) # 0–100%
+                    sim_0_1 = (cos_sim + 1) / 2           # map to [0, 1] for thresholds
                     
-                    if sim_percent  >= self.similarity_threshold:
+                    logger.info(
+                        f"Semantic cache search: distance={distance:.4f}, "
+                        f"similarity={sim_0_1:.4f}, threshold={self.similarity_threshold}"
+                    )
+                    
+                    if sim_0_1 >= self.similarity_threshold:
                         # Find the cached reply for this document
                         original_text = best_doc.metadata.get('original_text', best_doc.page_content)
                         cursor = self.db.conn.execute(
@@ -621,13 +711,22 @@ class ReplyCacheManager:
                         )
                         match = cursor.fetchone()
                         if match:
+                            logger.info(
+                                f"Semantic cache HIT: '{user_text}' matched '{original_text}' "
+                                f"(similarity={sim_0_1:.4f})"
+                            )
                             return ReplyCache(
                                 user_text=match[0],
                                 response_text=match[1],
                                 audio_file_path=match[2],
                                 created_at=match[3],
-                                similarity_score=sim_percent
+                                similarity_score=sim_0_1
                             )
+                    else:
+                        logger.debug(
+                            f"Semantic cache MISS: similarity {sim_0_1:.4f} "
+                            f"below threshold {self.similarity_threshold}"
+                        )
             except Exception as e:
                 logger.warning(f"Semantic search in cache failed: {str(e)}")
             
