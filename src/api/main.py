@@ -121,14 +121,17 @@ async def startup_event():
         # property / getter will block only that single request.
         async def _background_warmup():
             try:
-                await asyncio.gather(
+                from src.agents.langchain_rag_agent import get_rag_agent
+                tasks = [
                     stt_service.warm_up_models(),
                     llm_service.warm_up_models(),
-                )
-                await tts_service.warm_up_cache()
-                # Heavy: loads embeddings + builds vectorstore
-                from src.agents.langchain_rag_agent import get_rag_agent
-                await asyncio.to_thread(get_rag_agent)
+                    asyncio.to_thread(get_rag_agent),
+                ]
+                if not settings.SKIP_TTS_WARMUP:
+                    tasks.append(tts_service.warm_up_cache())
+                else:
+                    logger.info("Skipping TTS cache warm-up (SKIP_TTS_WARMUP=1)")
+                await asyncio.gather(*tasks)
                 logger.info("All warm-up tasks completed ✓")
             except Exception as e:
                 logger.error(f"Background warm-up error: {e}")

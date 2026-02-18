@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     WS_MSG_RATE_LIMIT: int = Field(20, env="WS_MSG_RATE_LIMIT")
     MAX_WS_CONNECTIONS_PER_IP: int = Field(5, env="MAX_WS_CONNECTIONS_PER_IP")
     MAX_TEXT_LENGTH: int = Field(2000, env="MAX_TEXT_LENGTH")
+    
+    # Serverless Optimization
+    SKIP_TTS_WARMUP: bool = Field(False, env="SKIP_TTS_WARMUP")
 
     
     class Config:
