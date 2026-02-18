@@ -112,8 +112,17 @@ export function useChat() {
 
         ws.onopen = () => {
             isConnectingRef.current = false;
-            setIsConnected(true);
             setError(null);
+
+            // Send auth message FIRST (before heartbeat or anything else)
+            const apiKey = process.env.NEXT_PUBLIC_ECHOAI_API_KEY;
+            if (apiKey) {
+                ws.send(JSON.stringify({ type: "auth", api_key: apiKey }));
+                // isConnected will be set when auth_success is received
+            } else {
+                // No auth configured — mark as connected immediately
+                setIsConnected(true);
+            }
 
             // FIX R7: Start heartbeat
             if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
@@ -170,6 +179,16 @@ export function useChat() {
 
     const handleWsMessage = useCallback((msg: WSIncomingMessage) => {
         switch (msg.type) {
+            case "auth_success":
+                // Auth succeeded — now mark as connected
+                setIsConnected(true);
+                break;
+
+            case "auth_failed":
+                setErrorWithDismiss(msg.message || "Authentication failed");
+                wsRef.current?.close();
+                break;
+
             case "connection":
                 sessionIdRef.current = msg.session_id || null;
                 break;

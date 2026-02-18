@@ -11,12 +11,14 @@ import uuid
 import base64
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.responses import JSONResponse
 import uvicorn
-import platform
-import subprocess
-import os
 
 from src.services.voice_pipeline import voice_pipeline
 from src.services.stt_service import stt_service
@@ -36,21 +38,52 @@ setup_logging()
 logger = get_logger(__name__)
 settings = get_settings()
 
+# ---------------------------------------------------------------------------
+# Rate limiter (slowapi)
+# ---------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
+
 # Create FastAPI app
 app = FastAPI(
     title="EchoAI Voice Chat API",
     description="Real-time AI voice chat with STT→LLM→TTS pipeline",
     version="1.0.0"
 )
+app.state.limiter = limiter
 
-# Add CORS middleware
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please slow down."},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CORS — restricted to configured origins
+# ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# API-key authentication dependency
+# ---------------------------------------------------------------------------
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(api_key: str = Depends(_api_key_header)):
+    """Reject requests that lack a valid API key."""
+    if not settings.ECHOAI_API_KEY:
+        return  # key not configured → auth disabled (dev convenience)
+    if api_key != settings.ECHOAI_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 # Global connection manager
 manager = ConnectionManager()
@@ -136,15 +169,22 @@ async def root():
     }
 
 
-@app.post(APIRoute.CHAT, response_model=ChatResponse)
-async def chat(req: ChatRequest):
+@app.post(APIRoute.CHAT, response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit(lambda: f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+async def chat(request: Request, req: ChatRequest):
+    # Input length validation
+    if len(req.message) > settings.MAX_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Message too long (max {settings.MAX_TEXT_LENGTH} characters)",
+        )
     session_id = req.session_id or str(uuid.uuid4())
     try:
         rag_result = await voice_pipeline.rag_agent.process_query(
             req.message, session_id
         )
         if "error" in rag_result:
-            raise HTTPException(status_code=500, detail=rag_result["error"])
+            raise HTTPException(status_code=500, detail="Processing failed")
 
         return ChatResponse(
             response=rag_result["response_text"],
@@ -156,11 +196,12 @@ async def chat(req: ChatRequest):
         raise
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-@app.get(APIRoute.PERSONA)
-async def persona():
+@app.get(APIRoute.PERSONA, dependencies=[Depends(verify_api_key)])
+@limiter.limit(lambda: f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+async def persona(request: Request):
     return {
         "name": "Ateet Vatan Bahmani",
         "title": "AI Engineer | LLM Integration & AI Automation Expert",
@@ -248,12 +289,43 @@ async def clear_conversation():
 async def websocket_voice_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time voice chat with streaming support."""
     
-    #unique session ID for each client.
+    # Resolve client IP
+    client_ip = websocket.client.host if websocket.client else "unknown"
     session_id = str(uuid.uuid4())
     
+    # ── Per-IP connection cap ─────────────────────────────────────
+    if not manager.can_accept(client_ip):
+        await websocket.accept()
+        await websocket.close(code=1008, reason="Too many connections from this IP")
+        logger.warning(f"Rejected WS from {client_ip}: connection cap exceeded")
+        return
+
     try:
-        await manager.connect(websocket, session_id)
+        await manager.connect(websocket, session_id, ip=client_ip)
         
+        # ── First-message authentication ──────────────────────────
+        if settings.ECHOAI_API_KEY:
+            try:
+                auth_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+                auth_msg = json.loads(auth_raw)
+                if (
+                    auth_msg.get("type") != "auth"
+                    or auth_msg.get("api_key") != settings.ECHOAI_API_KEY
+                ):
+                    await websocket.send_text(json.dumps({
+                        "type": "auth_failed",
+                        "message": "Invalid API key",
+                    }))
+                    await websocket.close(code=1008, reason="Authentication failed")
+                    manager.disconnect(session_id)
+                    return
+            except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+                await websocket.close(code=1008, reason="Authentication timeout")
+                manager.disconnect(session_id)
+                return
+
+            await websocket.send_text(json.dumps({"type": "auth_success"}))
+
         # Send welcome message
         await manager.send_message(session_id, {
             "type": WSMessageType.CONNECTION,
@@ -262,7 +334,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
             "features": ["streaming_audio", "real_time_processing"]
         })
         
-        logger.info(f"Voice chat session started: {session_id}")
+        logger.info(f"Voice chat session started: {session_id} (IP: {client_ip})")
         
         while True: # WebSocket connections are open indefinitely.
             try:
@@ -270,11 +342,19 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 
-                logger.info(f"session_id: {session_id}")
-                logger.info(f"message: {message}")
                 message_type = message.get("type")
-                logger.info(f"message_type: {message_type}")
                 
+                # ── Per-IP rate limiting (skip pings) ─────────────
+                if message_type != WSMessageType.PING and not manager.check_rate_limit(session_id):
+                    await manager.send_message(session_id, {
+                        "type": WSMessageType.ERROR,
+                        "message": "Rate limit exceeded. Please slow down.",
+                    })
+                    continue
+                
+                logger.info(f"session_id: {session_id}")
+                logger.info(f"message_type: {message_type}")
+
                 if message_type == WSMessageType.AUDIO:
                     #Full audio file is sent in one message.
                     await handle_audio_message(session_id, message)
@@ -602,6 +682,14 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
             })
             return
         
+        # Input length validation
+        if len(text) > settings.MAX_TEXT_LENGTH:
+            await manager.send_message(session_id, {
+                "type": WSMessageType.ERROR,
+                "message": f"Message too long (max {settings.MAX_TEXT_LENGTH} characters)"
+            })
+            return
+        
         # Send processing status
         await manager.send_message(session_id, {
             "type": WSMessageType.PROCESSING,
@@ -697,39 +785,11 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         })
 
 
-def free_port(port):
-    """
-    Frees the given TCP port by finding and killing the process that uses it.
-    Works on Windows, macOS, and Linux.
-    """
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.check_output(f'netstat -ano | findstr :{port}', shell=True).decode()
-            for line in result.strip().split("\n"):
-                if f":{port}" in line and "LISTENING" in line:
-                    pid = int(line.strip().split()[-1])
-                    logger.info(f"Port {port} in use by PID {pid}, killing...")
-                    subprocess.call(f"taskkill /PID {pid} /F", shell=True)
-                    logger.info(f"Port {port} freed")
-        else:
-            result = subprocess.check_output(f"lsof -t -i:{port}", shell=True).decode().strip().split("\n")
-            for pid in result:
-                if pid.strip():
-                    logger.info(f"Port {port} in use by PID {pid}, killing...")
-                    os.system(f"kill -9 {pid}")
-                    logger.info(f"Port {port} freed")
-    except subprocess.CalledProcessError:
-        logger.debug(f"Port {port} is already free")
-
-
 def run_server():
-    # Free port if already in use
-    free_port(settings.PORT)
-    
     uvicorn.run(
         "src.api.main:app",
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower()
-    ) 
+    )
