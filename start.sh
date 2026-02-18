@@ -9,9 +9,17 @@ echo "════════════════════════�
 export PORT="${PORT:-8080}"
 echo "  PORT=$PORT"
 
+# Internal port for the FastAPI backend (must differ from $PORT)
+BACKEND_PORT=8000
+if [ "$PORT" = "$BACKEND_PORT" ]; then
+    BACKEND_PORT=8001
+fi
+echo "  BACKEND_PORT=$BACKEND_PORT"
+
 # ── 1. Inject $PORT into nginx config ─────────────────────────────
 echo "  Configuring nginx on port $PORT..."
-envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+export BACKEND_PORT
+envsubst '${PORT} ${BACKEND_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Validate nginx config before starting anything
 echo "  Testing nginx config..."
@@ -34,13 +42,13 @@ fi
 echo "  nginx is running (PID $NGINX_PID) ✓"
 
 # ── 3. Start FastAPI backend (background) ─────────────────────────
-echo "  Starting FastAPI backend on :8000..."
+echo "  Starting FastAPI backend on :$BACKEND_PORT..."
 cd /app
 LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_LEVEL="${LOG_LEVEL,,}"   # uvicorn requires lowercase
 python -m uvicorn src.api.main:app \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port "$BACKEND_PORT" \
     --log-level "$LOG_LEVEL" \
     --no-access-log &
 BACKEND_PID=$!
