@@ -144,6 +144,13 @@ audio_cache/*.wav
 Thumbs.db
 rag_persona_db/document/CV_AI_Clone.docx
 
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
 # ChromaDB / vector database binary files
 *.bin
 src/db/chroma_db/
