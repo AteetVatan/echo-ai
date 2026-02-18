@@ -1,0 +1,6 @@
+{
+    "text": "MASX AI is a Multimodal Autonomous Strategic Intelligence System I designed and built. It's a modular, strategic LLM agent system for geopolitical simulation and ethical decision augmentation. The core idea is to convert live news into strategic forecasts.\n\nTechnically, it's built with a hybrid hexagonal architecture, featuring multi-agent orchestration using LangChain and AutoGen, real-time LLM pipelines powered by Flask APIs, and uses Redis for caching, Supabase for databases, and Airflow for orchestration. It performs strategic doctrine simulation to reason about geopolitical strategies.\n\nYou can see the live demo at https://masx-ai-client.vercel.app/ and the official website is masxai.com. The code is split across three main repositories for the client, server, and GDELT API integration.\n\nFor me, success for MASX AI is measured by accurate signals, actionable insights, and verifiable outcomes.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_1411620598065952862.mp3",
+    "created_at": "2026-02-18T15:07:07.625800"
+}

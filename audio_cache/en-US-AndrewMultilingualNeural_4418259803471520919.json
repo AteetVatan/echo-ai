@@ -1,0 +1,6 @@
+{
+    "text": "MASX-GeoSignal MASX-GSGI is my high-throughput, fully automated pipeline for global security and geopolitical intelligence. It processes over 10,000 multilingual news URLs daily through a sophisticated, multi-stage system.\n\nThe core workflow is: async fetching of news, a four-method ensemble for robust text extraction, language detection, title translation, named entity recognition with geo-resolution, and advanced deduplication using SHA-256 and MinHash LSH. I then generate sentence embeddings, cluster related stories, and produce two-stage summaries\u2014first with a local DistilBART model, then with an LLM for higher-tier plans.\n\nIt's designed to be cost-efficient and scalable, operating in three tiers CPU-only, balanced, and LLM-enhanced starting at $6/month. The entire stack is built on modern Python 3.12+, with SQLAlchemy 2.0, asyncpg, pgvector for vector storage, and FastAPI, all containerized with Docker. You can find the full codebase on my GitHub.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_4418259803471520919.mp3",
+    "created_at": "2026-02-18T15:08:00.146150"
+}

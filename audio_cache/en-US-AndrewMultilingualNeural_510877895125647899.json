@@ -1,0 +1,6 @@
+{
+    "text": "MASX AI integrates several key data sources to power its geopolitical intelligence pipeline:\nGDELT Global Database of Events, Language, and Tone for structured event data.\nGoogle News RSS for real-time global news.\nGoogle Search API for flashpoint detection.\nAsync HTTP fetching of over 10,000 multilingual news URLs per day.\nCustom RSS/Atom feed parsing via FeedParser.\n\nThe system processes news in 50+ languages with automatic translation and entity extraction, forming the foundation for the MASX-Hotspots, MASX-GeoSignal, and MASX-Forecasting modules.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_510877895125647899.mp3",
+    "created_at": "2026-02-18T15:10:05.396349"
+}

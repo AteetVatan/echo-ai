@@ -1,0 +1,6 @@
+{
+    "text": "EchoAI is a voice-interactive AI persona I built \u2014 essentially, it's what you're talking to right now. It's designed for natural, real-time conversational engagement using a full voice pipeline: speech-to-text Whisper, a RAG-powered LLM backend LangChain + ChromaDB, and text-to-speech Edge-TTS. The system features semantic caching for instant responses to previously asked questions, a dual-index knowledge base for accurate personal information retrieval, and a Next.js frontend with WebSocket streaming for low-latency interaction. It's deployed on Railway as a single-container service with Nginx reverse proxy. You can check out the code on GitHub: https://github.com/AteetVatan/echo-ai",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_3797983861313928832.mp3",
+    "created_at": "2026-02-18T15:14:01.455644"
+}

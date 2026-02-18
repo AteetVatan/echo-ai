@@ -1,0 +1,6 @@
+{
+    "text": "MASX-Hotspots is my autonomous global intelligence platform for 24/7 flashpoint detection, analysis, and forecasting. It's built on a multi-agent AI orchestration system that performs a full-scale internet scan daily at 00:00 UTC to process real-time geopolitical data. The core architecture consists of two subsystems: an Agent Hub that acts as the intelligence engine, and an API Server that handles data access. It uses 18 specialized LangGraph agents for tasks like query planning, language detection, translation, fact-checking, and dual-source aggregation from Google News RSS and GDELT. The system supports over 50 languages and is designed for strategic, real-time intelligence.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_8414966122093619171.mp3",
+    "created_at": "2026-02-18T15:08:15.143054"
+}
