@@ -1,0 +1,428 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Dark Futuristic AI Dashboard Theme ── */
+:root {
+  /* Backgrounds */
+  --color-bg: #0b0d17;
+  --color-bg-secondary: #0f1120;
+  --color-surface: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-active: rgba(255, 255, 255, 0.12);
+
+  /* Borders */
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
+
+  /* Text */
+  --color-text: #e8eaed;
+  --color-text-muted: #7a7f8e;
+  --color-text-dim: #4a4f5e;
+
+  /* Accent palette — neural node colors */
+  --color-coral: #ff6b6b;
+  --color-pink: #3b82f6;
+  --color-pink-light: #60a5fa;
+  --color-teal: #00cec9;
+  --color-teal-light: #81ecec;
+  --color-amber: #fdcb6e;
+  --color-amber-dark: #e17055;
+  --color-violet: #a29bfe;
+  --color-green: #55efc4;
+  --color-blue: #74b9ff;
+
+  /* Gradients */
+  --gradient-pink: linear-gradient(135deg, #3b82f6, #60a5fa);
+  --gradient-teal: linear-gradient(135deg, #00cec9, #81ecec);
+  --gradient-coral: linear-gradient(135deg, #ff6b6b, #e17055);
+  --gradient-violet: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  --gradient-amber: linear-gradient(135deg, #fdcb6e, #e17055);
+  --gradient-green: linear-gradient(135deg, #55efc4, #00cec9);
+
+  /* Glow */
+  --glow-pink: rgba(59, 130, 246, 0.25);
+  --glow-teal: rgba(0, 206, 201, 0.25);
+  --glow-coral: rgba(255, 107, 107, 0.25);
+  --glow-violet: rgba(162, 155, 254, 0.25);
+  --glow-amber: rgba(253, 203, 110, 0.25);
+  --glow-green: rgba(85, 239, 196, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--color-bg);
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-inter, "Inter", system-ui, sans-serif);
+  background: transparent;
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Full-page portfolio background */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-image: url("/profile.jpg");
+  background-size: cover;
+  background-position: 75% top;
+  background-repeat: no-repeat;
+}
+
+/* Dark overlay for readability */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg,
+      rgba(11, 13, 23, 0.7) 0%,
+      rgba(11, 13, 23, 0.85) 40%,
+      rgba(11, 13, 23, 0.95) 100%);
+}
+
+::selection {
+  background: var(--color-pink);
+  color: white;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Glassmorphism ── */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+/* ── Gradient text ── */
+.gradient-text-pink {
+  background: var(--gradient-pink);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-teal {
+  background: var(--gradient-teal);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Animations ── */
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes neural-pulse {
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(10px, -15px);
+  }
+
+  50% {
+    transform: translate(-5px, -25px);
+  }
+
+  75% {
+    transform: translate(-15px, -10px);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes rotate-slow {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes breathe {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+.animate-drift {
+  animation: drift 20s ease-in-out infinite;
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+/* ── Neural node dot ── */
+.neural-dot {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ── Glow ring ── */
+.glow-ring {
+  position: relative;
+}
+
+.glow-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--gradient-pink);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.glow-ring:hover::before {
+  opacity: 1;
+}
+
+/* ── Voice state animations ── */
+@keyframes wave-bar {
+
+  0%,
+  100% {
+    height: 4px;
+  }
+
+  50% {
+    height: 20px;
+  }
+}
+
+@keyframes speak-bar {
+
+  0%,
+  100% {
+    height: 6px;
+  }
+
+  25% {
+    height: 16px;
+  }
+
+  75% {
+    height: 10px;
+  }
+}
+
+@keyframes think-progress {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes mic-breathe-ring {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 206, 201, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 206, 201, 0);
+  }
+}
+
+@keyframes interrupt-flash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+.animate-wave-bar {
+  animation: wave-bar 0.8s ease-in-out infinite;
+}
+
+.animate-speak-bar {
+  animation: speak-bar 1s ease-in-out infinite;
+}
+
+.animate-think-progress {
+  animation: think-progress 1.5s ease-in-out infinite;
+}
+
+.animate-mic-breathe {
+  animation: mic-breathe-ring 2s ease-in-out infinite;
+}
+
+/* ── Mobile Responsive Overrides ── */
+
+/* Small screens: background & performance */
+@media (max-width: 767px) {
+  body::before {
+    background-position: center top;
+  }
+
+  body::after {
+    background: linear-gradient(180deg,
+        rgba(11, 13, 23, 0.8) 0%,
+        rgba(11, 13, 23, 0.92) 40%,
+        rgba(11, 13, 23, 0.98) 100%);
+  }
+
+  /* Reduce blur for GPU performance on mobile */
+  .glass-panel {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .glass-card {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* Hide scrollbar on touch devices */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Disable hover transforms on touch devices */
+@media (hover: none) {
+  .glass-card:hover {
+    transform: none;
+  }
+}

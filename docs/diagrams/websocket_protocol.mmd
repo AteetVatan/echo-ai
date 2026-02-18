@@ -1,0 +1,55 @@
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant Client as Web Client
+    participant WS as WebSocket Server
+    participant CM as ConnectionManager
+    participant VP as VoicePipeline
+    participant RAG as RAG Agent
+
+    Note over Client,RAG: Connection Lifecycle
+
+    Client->>WS: Connect ws://host:8000/ws/{session_id}
+    WS->>CM: connect(websocket, session_id)
+    CM-->>Client: {"type": "connection", "status": "connected"}
+
+    Note over Client,RAG: Complete Audio Mode
+
+    Client->>WS: {"type": "audio", "data": "base64..."}
+    WS->>VP: process_voice_input(audio_data)
+    VP->>VP: STT → Text
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Streaming Audio Mode
+
+    Client->>WS: {"type": "start_streaming"}
+    WS->>CM: set_streaming_status(true)
+    WS-->>Client: {"type": "streaming_started"}
+
+    loop Audio Chunks
+        Client->>WS: {"type": "audio_chunk", "data": "base64..."}
+        WS->>CM: add_audio_chunk(session_id, chunk)
+        WS-->>Client: {"type": "chunk_received"}
+    end
+
+    Client->>WS: {"type": "stop_streaming"}
+    WS->>CM: get_audio_buffer(session_id)
+    WS->>VP: process_streaming_voice(chunks)
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Text Chat Mode
+
+    Client->>WS: {"type": "text", "text": "Hello"}
+    WS->>VP: process_text_input(text)
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Keep-Alive
+
+    Client->>WS: {"type": "ping"}
+    WS-->>Client: {"type": "pong"}

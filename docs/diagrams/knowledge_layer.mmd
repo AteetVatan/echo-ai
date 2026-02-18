@@ -1,0 +1,46 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4f46e5', 'secondaryColor': '#f97316'}}}%%
+flowchart TD
+    subgraph "Data Sources"
+        JSON["self_info.json<br/>(Q&A Records)"]
+        README_FILES["GitHub READMEs<br/>(ApplyBots, Galileo, ShotGraph,<br/>MASX-*, MedAI)"]
+        CV["CV / .docx"]
+        CSV["LinkedIn CSVs<br/>(Skills, Projects, Endorsements,<br/>Languages, Learning)"]
+    end
+
+    subgraph "Loaders"
+        SIL["SelfInfoLoader<br/>JSON → SelfInfoItem via Pydantic"]
+        EL_MD["Markdown Loader<br/>Header-aware chunking<br/>(1000 chars, 150 overlap)"]
+        EL_DOCX["DOCX Loader<br/>Paragraph-level chunking"]
+        EL_CSV["CSV Loader<br/>Row-to-document conversion"]
+        EL_PDF["PDF Loader<br/>(PyPDF fallback)"]
+    end
+
+    subgraph "Schema & Transform"
+        SCHEMA["SelfInfoSchema<br/>(Pydantic v2 Validation)"]
+        TO_DOCS["to_langchain_documents()<br/>Deterministic stable_id<br/>via SHA-256"]
+        EVIDENCE_DOCS["load_evidence_documents()<br/>Deterministic IDs<br/>via MD5 hashing"]
+    end
+
+    subgraph "Dual-Index Vector Store"
+        FACTS_IDX[("ChromaDB<br/>echoai_self_info_facts<br/>(Atomic Q&A)")]
+        EVIDENCE_IDX[("ChromaDB<br/>echoai_self_info_evidence<br/>(Chunked Docs)")]
+        EMB["SentenceTransformer<br/>all-MiniLM-L6-v2"]
+    end
+
+    subgraph "Query Processing"
+        QR["QueryRouter<br/>(Deterministic — no LLM)<br/>Keyword + Intent Patterns"]
+        RET["SelfInfoRetriever<br/>Hybrid: Vector + BM25<br/>Post-filter: doc_type + tags"]
+        RAG["SelfInfoRAG<br/>Grounded answer chain<br/>Temperature = 0"]
+    end
+
+    JSON --> SIL --> SCHEMA --> TO_DOCS --> FACTS_IDX
+    README_FILES --> EL_MD --> EVIDENCE_DOCS --> EVIDENCE_IDX
+    CV --> EL_DOCX --> EVIDENCE_DOCS
+    CSV --> EL_CSV --> EVIDENCE_DOCS
+
+    EMB --> FACTS_IDX & EVIDENCE_IDX
+
+    QR --> RET
+    RET --> FACTS_IDX & EVIDENCE_IDX
+    RET --> RAG
+    RAG -->|"Grounded Response"| OUTPUT["answer, key_facts, sources, route"]

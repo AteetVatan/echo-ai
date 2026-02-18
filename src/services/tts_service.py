@@ -6,6 +6,7 @@ This module provides TTS functionality using Microsoft Edge neural TTS
 """
 
 import asyncio
+import re
 import time
 from typing import Dict, Any, List, Optional, AsyncGenerator
 import edge_tts
@@ -14,6 +15,7 @@ from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
 from src.utils.audio import audio_stream_processor
 from src.db import DBOperations
+from src.constants import ModelName, LATENCY_WINDOW_SIZE, IN_MEMORY_CACHE_MAX_SIZE, IN_MEMORY_CACHE_EVICT_COUNT
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -97,14 +99,37 @@ class TTSService:
         self.cache[cache_key] = audio_data
         
         # Limit cache size
-        if len(self.cache) > 1000:
-            # Remove oldest entries
-            oldest_keys = list(self.cache.keys())[:100]
+        if len(self.cache) > IN_MEMORY_CACHE_MAX_SIZE:
+            oldest_keys = list(self.cache.keys())[:IN_MEMORY_CACHE_EVICT_COUNT]
             for key in oldest_keys:
                 del self.cache[key]
     
+    @staticmethod
+    def _sanitize_for_tts(text: str) -> str:
+        """Strip markdown / special chars that TTS should not vocalise.
+
+        Keeps natural speech punctuation:  ? . @ , : ; ! ' " and whitespace.
+        """
+        # Remove markdown bold/italic markers (**, *, __, _)
+        text = re.sub(r'\*{1,2}', '', text)
+        text = re.sub(r'_{1,2}', '', text)
+        # Remove markdown headings (### etc.)
+        text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+        # Remove markdown list bullets (- or * at line start)
+        text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+        # Remove backticks (inline code / code blocks)
+        text = re.sub(r'`{1,3}', '', text)
+        # Remove markdown links [text](url) → keep text
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        # Remove remaining special chars except ? . @ , : ; ! ' "
+        text = re.sub(r'[~|>\\#\[\](){}]', '', text)
+        # Collapse multiple spaces / blank lines
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
     @log_performance
-    async def synthesize_speech(self, text: str, use_streaming: bool = True, voice: str = None) -> Dict[str, Any]:
+    async def synthesize_speech(self, text: str, *, use_streaming: bool = True, voice: str = None) -> Dict[str, Any]:
         """
         Synthesize speech from text using Edge-TTS.
         
@@ -116,6 +141,9 @@ class TTSService:
         Returns:
             Dict with audio data and metadata
         """
+        # Clean markdown/special chars before synthesis
+        text = self._sanitize_for_tts(text)
+
         start_time = time.time()
         
         try:
@@ -130,7 +158,7 @@ class TTSService:
                 
                 return {
                     "audio_data": cached_audio,
-                    "model": "edge_tts_cached",
+                    "model": ModelName.EDGE_TTS_CACHED,
                     "latency": latency,
                     "cached": True
                 }
@@ -182,7 +210,7 @@ class TTSService:
             
             return {
                 "audio_data": audio_data,
-                "model": "edge_tts",
+                "model": ModelName.EDGE_TTS,
                 "latency": latency,
                 "cached": False
             }
@@ -283,8 +311,8 @@ class TTSService:
             self.performance_stats["failed_syntheses"] += 1
         
         # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > 100:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
         
         # Update average latency
         if self.performance_stats["latencies"]:

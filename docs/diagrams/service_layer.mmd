@@ -1,0 +1,65 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4f46e5'}}}%%
+flowchart LR
+    subgraph "API Layer"
+        A1["FastAPI App"]
+        A2["WebSocket Endpoint"]
+        A3["REST Endpoints"]
+        A4["Connection Manager"]
+    end
+
+    subgraph "Service Layer"
+        S1["VoicePipeline"]
+        S2["STTService"]
+        S3["LLMService"]
+        S4["TTSService"]
+    end
+
+    subgraph "Agent Layer"
+        AG1["LangChainRAGAgent"]
+        AG2["ReplyCacheManager"]
+    end
+
+    subgraph "Knowledge Layer"
+        KL1["QueryRouter"]
+        KL2["SelfInfoRetriever"]
+        KL3["SelfInfoRAG"]
+        KL4["SelfInfoVectorStore"]
+        KL5["SelfInfoLoader"]
+        KL6["EvidenceLoader"]
+    end
+
+    subgraph "Data Layer"
+        D1[("SQLite")]
+        D2[("Supabase PostgreSQL")]
+        D3[("ChromaDB Facts Index")]
+        D4[("ChromaDB Evidence Index")]
+        D5["self_info.json"]
+        D6["rag_persona_db/"]
+    end
+
+    subgraph "Utility Layer"
+        U1["Config — Pydantic Settings"]
+        U2["Structured Logging"]
+        U3["Performance Monitor"]
+        U4["Audio Processor"]
+        U5["Audio Stream Processor"]
+    end
+
+    A1 --> A2 & A3
+    A2 --> A4
+    A2 & A3 --> S1
+    S1 --> S2 & S3 & S4
+    S1 --> AG1
+    AG1 --> AG2
+    AG1 --> KL3
+    KL3 --> KL2
+    KL2 --> KL1
+    KL2 --> KL4
+    KL4 --> KL5 & KL6
+    KL4 --> D3 & D4
+    KL5 --> D5
+    KL6 --> D6
+    AG2 --> D1 & D3
+    S4 --> D1
+    S2 --> U4 & U5
+    S1 & S2 & S3 & S4 --> U1 & U2 & U3

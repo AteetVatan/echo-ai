@@ -20,6 +20,8 @@ import numpy as np
 from src.utils import get_settings
 from src.utils import get_logger, log_performance, log_error_with_context
 from src.utils.audio import audio_processor, audio_stream_processor
+from src.constants import ModelName, LATENCY_WINDOW_SIZE, STREAMING_BATCH_SIZE
+from src.exceptions import STTError
 
 
 logger = get_logger(__name__)
@@ -72,9 +74,10 @@ class STTService:
                 model_size = "small"      # small model for speed on CPU
                 logger.info("No GPU detected — using CPU with int8 and small model")
 
-            # Load Faster-Whisper model
+            # Load Faster-Whisper model (offload to thread — it's a heavy sync call)
             try:
-                self.fw_model = WhisperModel(
+                self.fw_model = await asyncio.to_thread(
+                    WhisperModel,
                     model_size,   # dynamic based on hardware
                     device=device,
                     compute_type=compute_type,
@@ -102,7 +105,7 @@ class STTService:
         start_time = time.time()
         try:
             if not self.fw_model:
-                raise Exception("Faster-Whisper model not loaded")
+                raise STTError("Faster-Whisper model not loaded")
 
             # Process audio to standard mono/16k WAV
             processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
@@ -132,7 +135,7 @@ class STTService:
 
             return {
                 "text": text,
-                "model": "faster_whisper_small",
+                "model": ModelName.FASTER_WHISPER_SMALL,
                 "latency": latency,
                 "confidence": 1.0  # FW doesn't return confidence
             }
@@ -148,7 +151,7 @@ class STTService:
         
         try:
             if not self.openai_client:
-                raise Exception("OpenAI client not initialized")
+                raise STTError("OpenAI client not initialized")
             
             # Process audio for OpenAI
             processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
@@ -170,7 +173,7 @@ class STTService:
             
             return {
                 "text": transcription,
-                "model": "openai_whisper",
+                "model": ModelName.OPENAI_WHISPER,
                 "latency": latency,
                 "confidence": 1.0  # OpenAI doesn't provide confidence scores
             }
@@ -181,7 +184,7 @@ class STTService:
             raise
     
     @log_performance
-    async def transcribe_audio(self, audio_data: bytes, use_fallback: bool = False) -> Dict[str, Any]:
+    async def transcribe_audio(self, audio_data: bytes, *, use_fallback: bool = False) -> Dict[str, Any]:
         """
         Transcribe audio using primary or fallback STT service.
         
@@ -297,7 +300,7 @@ class STTService:
                 audio_chunks.append(chunk)
                 
                 # Process in batches for optimal performance
-                if len(audio_chunks) >= 5:  # Process every 5 chunks
+                if len(audio_chunks) >= STREAMING_BATCH_SIZE:
                     break
             
             if not audio_chunks:
@@ -320,8 +323,8 @@ class STTService:
             self.performance_stats["failed_transcriptions"] += 1
         
         # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > 100:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-100:]
+        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
+            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
         
         # Update average latency
         if self.performance_stats["latencies"]:
@@ -335,8 +338,8 @@ class STTService:
             "failed_transcriptions": self.performance_stats["failed_transcriptions"],
             "avg_latency": self.performance_stats["avg_latency"],
             "models_warmed_up": self.models_warmed_up,
-            "primary_model": "huggingface_whisper" if self.hf_pipeline else "none",
-            "fallback_model": "openai_whisper" if self.openai_client else "none"
+            "primary_model": ModelName.FASTER_WHISPER_SMALL if self.hf_pipeline else ModelName.NONE,
+            "fallback_model": ModelName.OPENAI_WHISPER if self.openai_client else ModelName.NONE
         }
 
 

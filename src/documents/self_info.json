@@ -8,10 +8,246 @@
       "hr",
       "rag-dataset",
       "temperature-0",
-      "career"
+      "identity"
     ],
-    "question": "Whant is your name?",
-    "answer": "I am Ateet' AI clone. Desigenged and developed by Ateet."
+    "question": "What is your name?",
+    "answer": "I am Ateet's AI clone. Designed and developed by Ateet Vatan Bahmani."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your full name?",
+    "answer": "Ateet Vatan Bahmani."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Where are you located?",
+    "answer": "Essen, Germany."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your professional title?",
+    "answer": "AI Engineer | LLM Integration & AI Automation Expert. Freelance AI Engineer Consultant."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "identity",
+      "bio",
+      "hr",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Give me a short bio or introduction.",
+    "answer": "Ateet Vatan Bahmani is an AI Engineer based in Essen, Germany, specializing in LLM integration, AI workflow automation, LangChain development, AutoGen multi-agent systems, and AI system design. He builds enterprise-grade agentic AI systems and RAG pipelines, and is the architect of MASX AI—a doctrine-driven geopolitical forecasting system with multi-agent orchestration."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your LinkedIn profile?",
+    "answer": "https://www.linkedin.com/in/ateet-vatan-bahmani/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your GitHub profile?",
+    "answer": "https://github.com/AteetVatan"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your portfolio website?",
+    "answer": "https://ateetai.vercel.app/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your email address?",
+    "answer": "ab@masxai.com"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "How can someone contact you or connect with you?",
+    "answer": "You can reach Ateet via email at ab@masxai.com, connect on LinkedIn at https://www.linkedin.com/in/ateet-vatan-bahmani/, view his portfolio at https://ateetai.vercel.app/, or explore his open-source projects on GitHub at https://github.com/AteetVatan."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "contact",
+      "links",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What are your online profiles and links?",
+    "answer": "LinkedIn: https://www.linkedin.com/in/ateet-vatan-bahmani/ | GitHub: https://github.com/AteetVatan | Portfolio: https://ateetai.vercel.app/ | Email: ab@masxai.com"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What are your featured projects?",
+    "answer": "1) MASX AI – A modular, strategic LLM agent system for geopolitical simulation and ethical decision augmentation (Python, Flask, LangChain, AutoGen, Supabase, Redis, Airflow, Docker). Live at https://masx-ai-client.vercel.app/. 2) EchoAI – A personal AI voice clone with RAG-powered knowledge retrieval and real-time voice synthesis. 3) AgenticMatch-3H – A 3-hour Agentic AI prototype for brand matching using CLIP embeddings and FAISS similarity search (Python, CLIP, FastAPI). Live at https://huggingface.co/spaces/AteetVatan/agenticmatch. 4) Nexora Portfolio – Portfolio website (React, TypeScript, Tailwind CSS, Vite, Supabase). Live at https://ateetai.vercel.app/. 5) Movie Management System – Full-stack CRUD app with MVC pattern (Python, Flask, SQLite, Jinja2). 6) Drone Delivery Planner – Real-time drone delivery optimization (C#, AWS, Map APIs). 7) Masterblog API – MVC-inspired modular API for blog management (Python, Flask, SQLAlchemy)."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about MASX AI.",
+    "answer": "MASX AI is a Multimodal Autonomous Strategic Intelligence System—a modular, strategic LLM agent system for geopolitical simulation and ethical decision augmentation. It features multi-agent orchestration with LangChain and AutoGen, real-time LLM pipelines with Flask APIs, Redis caching, Supabase databases, Airflow orchestration, and strategic doctrine simulation for reasoning about geopolitical strategies. Client: https://github.com/AteetVatan/MASX_AI_CLIENT, Server: https://github.com/AteetVatan/MASX_AI_SERVER, GDELT API: https://github.com/AteetVatan/MASX_AI_GDELT_API. Live demo: https://masx-ai-client.vercel.app/"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about EchoAI.",
+    "answer": "EchoAI is a personal AI voice clone system built with Retrieval-Augmented Generation (RAG). It uses a vector database (ChromaDB/FAISS) to store and retrieve knowledge about Ateet, combined with real-time text-to-speech and speech-to-text capabilities. It powers Ateet's AI digital twin, allowing natural voice conversations grounded in his real experience and personality."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "projects",
+      "portfolio",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about AgenticMatch.",
+    "answer": "AgenticMatch-3H is a 3-hour Agentic AI prototype that lets users upload an image and matches it to partner brands based on visual style and mood using CLIP embeddings and FAISS similarity search. Built with Python, CLIP, and FastAPI. Live demo on Hugging Face: https://huggingface.co/spaces/AteetVatan/agenticmatch. GitHub: https://github.com/AteetVatan/AgenticMatch-3H"
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "skills",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your full tech stack?",
+    "answer": "AI/LLM Engineering: LangChain, LangGraph, AutoGen, CrewAI, RAG (ChromaDB/FAISS), Hugging Face, Prompt Engineering, Ethical Simulation Frameworks, Autonomous Agent Routing. Fullstack: Python (Flask, FastAPI), C#, .NET Core, React, Angular, Vite, TypeScript. Data & Infrastructure: Supabase, Redis, Airflow, Kafka, Vector Databases, Microservices Architecture. Cloud & DevOps: Docker, GitHub Actions, GitLab CI/CD, Azure DevOps, AWS (Lambda, ECS, S3, API Gateway, IAM), Vercel. AI Tools: OpenAI APIs, Mistral Models, Pinecone, Edge-TTS, CLIP embeddings."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "skills",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What AI and LLM frameworks do you use?",
+    "answer": "LangChain, LangGraph, AutoGen, CrewAI, Hugging Face Transformers, LlamaIndex. For vector retrieval: ChromaDB, FAISS, and Pinecone. For LLM providers: OpenAI, Mistral, and Gemini."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "education",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your education background?",
+    "answer": "AI Engineering program at Masterschool (2025), PCEP certification (2025). Over 12 years of professional software engineering experience starting at IHS Markit (2012–2024), progressing from Software Engineer to Senior Software Engineer before transitioning fully into AI Engineering."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career",
+      "timeline",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your career timeline?",
+    "answer": "2012–2024: Software Engineer → Senior Software Engineer at IHS Markit (automotive software, IT services). Dec 2024–Present: Freelance AI Engineer Consultant, building MASX AI and other AI products with LangChain, AutoGen, RAG, and multi-agent orchestration."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "vision",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your current focus?",
+    "answer": "Building MASX AI — a doctrine-driven geopolitical forecasting system with multi-agent orchestration. Also building EchoAI — a personal AI voice clone system. Implementing real-time LLM pipelines with Flask APIs, Redis caching, Supabase databases, and Airflow orchestration. Designing LangChain and AutoGen-based LLM agents with adaptive ethics and vectorized memory retrieval."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "vision",
+      "career",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your MASX AI vision for 2024-2025?",
+    "answer": "Architect a modular, dynamic multi-agent system for strategic simulation. Integrate live geopolitical data ingestion pipelines and real-time adaptive doctrine engines. Develop ethical simulation layers for value-aligned decision making. Engineer scalable memory retrieval systems using custom vector databases and Supabase optimization. Position MASX AI for real-world applications in defense, policy intelligence, and mission-critical automation."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "github",
+      "open-source",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Where can I find your open-source repositories?",
+    "answer": "All public repositories are available at https://github.com/AteetVatan?tab=repositories. Featured repos include MASX_AI_CLIENT, MASX_AI_SERVER, MASX_AI_GDELT_API, AgenticMatch-3H, Movie_Project, Ateet_Portfolio_APP_Nexora, Masterblog_API, DroneDeliveryPlanner, and Masterblog."
   },
   {
     "doc_type": "career",
@@ -3442,5 +3678,1051 @@
     ],
     "question": "Will AI replace human decision-makers?",
     "answer": "No—AI augments; humans keep final authority."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your full name?",
+    "answer": "Ateet Bahamani (also known as Ateet Vatan Bahmani)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your date of birth?",
+    "answer": "December 1, 1979."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your address?",
+    "answer": "32 Viehofer Strasse, Essen 45127, Germany."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your primary email address?",
+    "answer": "ab@masxai.com. Other emails include ateetph@gmail.com and ateetv555@gmail.com."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your portfolio website?",
+    "answer": "https://ateetai.vercel.app/ — it showcases my projects, blog, and technical profile."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your GitHub profile?",
+    "answer": "https://github.com/AteetVatan — all my open-source and public project repositories are hosted there."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is the MASX AI website?",
+    "answer": "https://masxai.com — the official site for the MASX AI platform."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What languages do you speak?",
+    "answer": "Hindi (native/bilingual), English (native/bilingual), and German (professional working proficiency, B1 certified)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "contact"
+    ],
+    "question": "What is your LinkedIn headline?",
+    "answer": "AI Architect/Engineer | LLM Integration & AI Automation Expert | 15+ yrs Full Stack Dev."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What was your role at 12IQ?",
+    "answer": "AI Architect at 12IQ Inc. (early-stage startup), from November 2025 to January 2026. I led architecture and end-to-end development of a large-scale Deterministic AI platform delivering predictable, auditable intelligence workflows using Python, C#, and TypeScript. I architected a modular, execution-driven AI system with a single deterministic execution spine, coordinating orchestration, context management, knowledge processing, reasoning, and multi-model validation."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you accomplish at 12IQ?",
+    "answer": "At 12IQ I defined AI-first engineering standards with safe usage patterns, guardrails, and CI/CD checks. I enabled engineers via reusable templates/patterns for tool/function calling and RAG-style retrieval. I ran experiments to evaluate AI workflows for quality, latency, and cost, then standardized successful patterns into repeatable playbooks. I also led technical delivery, interviewing, mentoring, and guiding engineers and interns across API, DB, and automation workstreams. Daily GenAI usage included Cursor/Windsurf and direct LLMs for design, coding, debugging, tests, documentation, and operational runbooks."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What was your role at Pitney Bowes Software?",
+    "answer": "Software Engineer at Pitney Bowes Software in Noida, India, from March 2009 to July 2011. I contributed to the development of the MapInfo MapXtreme GIS SDK, building reusable geospatial components and enterprise mapping tools for large-scale enterprise GIS systems used worldwide."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you accomplish at Pitney Bowes?",
+    "answer": "At Pitney Bowes I developed GIS SDK modules using C#, .NET Framework, and SQL Server, powering large-scale enterprise spatial applications. I designed metadata tagging and spatial retrieval logic, reducing map-layer load times and optimizing performance across massive geodata sets. I also created structured GIS metadata models for location-aware querying and rendering, enabling context-driven geographic intelligence."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is your complete work experience timeline?",
+    "answer": "Pitney Bowes Software (Software Engineer, Mar 2009–Jul 2011, Noida India), IHS Markit | Technology (Software Engineer, Mar 2012–Jul 2017, Essen/Leverkusen Germany), IHS Markit (Senior Software Engineer, Jul 2017–Nov 2024, Essen Germany), Freelance AI Engineer Consultant (Dec 2024–present, Essen Germany), and 12IQ Inc. (AI Architect, Nov 2025–Jan 2026)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Tell me about your work experience.",
+    "answer": "I have over 15 years of professional software and AI engineering experience. I started at Pitney Bowes Software as a Software Engineer (2009–2011) in Noida, India, building GIS SDK modules. Then I joined IHS Markit in Germany (2012–2017) as a Software Engineer, developing enterprise geospatial analytics platforms. I was promoted to Senior Software Engineer at IHS Markit (2017–2024), where I led full-cycle delivery, architected multi-region forecasting platforms, and modernized legacy systems to AWS. Since December 2024 I work as a Freelance AI Engineer Consultant, building MASX AI and EchoAI. I also served as AI Architect at 12IQ Inc. (Nov 2025–Jan 2026)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your professional experience?",
+    "answer": "Over 15 years of experience spanning software engineering and AI engineering. Key roles: Pitney Bowes Software (Software Engineer, 2009–2011), IHS Markit (Software Engineer then Senior Software Engineer, 2012–2024), Freelance AI Engineer Consultant (Dec 2024–present), and 12IQ Inc. (AI Architect, Nov 2025–Jan 2026). My expertise covers full-stack development, cloud architecture (AWS), CI/CD, and now AI/LLM engineering with LangChain, AutoGen, and RAG systems."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your career history?",
+    "answer": "My career started at Pitney Bowes Software in India (2009–2011), where I built GIS SDK modules. I then moved to Germany and joined IHS Markit (2012–2024), progressing from Software Engineer to Senior Software Engineer over 12 years. At IHS Markit I worked on automotive analytics platforms, cloud migrations to AWS, and CI/CD automation. Since late 2024, I transitioned into AI engineering as a Freelance AI Engineer Consultant, and also worked as AI Architect at 12IQ Inc. (2025–2026)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you accomplish at IHS Markit as Senior Software Engineer?",
+    "answer": "At IHS Markit (Jul 2017–Nov 2024) I led full-cycle delivery across backend, UI, and deployment layers in a team of 5 engineers, collaborating cross-functionally with teams across 3 continents. I architected modular, multi-region forecasting platforms used by major global automotive clients. I engineered secure, async-ready APIs and dashboard services using C# (.NET Core), Node.js, Python, and AWS (Lambda, ECS). I built CI/CD pipelines with GitLab, Docker, and Azure DevOps, reducing deployment errors by 70% and cutting release cycles. I modernized 10+ legacy systems into cloud-native AWS and Angular apps, resulting in 40% faster load times and 60% faster deployments."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "work-experience",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you accomplish at IHS Markit as Software Engineer?",
+    "answer": "At IHS Markit | Technology (Mar 2012–Jul 2017) I developed, designed, and delivered enterprise-grade geospatial analytics platforms and decision support tools used by 20+ automotive clients across 7 continents. I developed full-stack spatial intelligence platforms using C#, ASP.NET, VB.NET, and jQuery, integrating over 1M+ geolocation records for real-time analysis. I built interactive map overlays driven by live data from SQL Server, enabling dynamic dealer network analysis and territory forecasting tools. I delivered geospatial modules for regional planning, forecasting, and market visibility—boosting dealer network transparency by 100%."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "education",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is your educational background?",
+    "answer": "Bachelor of Technology from Guru Gobind Singh Indraprastha University (2001–2005), Master's degree from Symbiosis Institute of Geoinformatics (2007–2009), and AI Engineering program at Masterschool (Dec 2024–Aug 2025)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "education",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you study at Masterschool?",
+    "answer": "AI Engineering program focused on Generative AI using Large Language Models (LLMs), with practical training in building production-grade AI systems. I built scalable AI applications using Python, FastAPI, and Pydantic; developed RAG pipelines using LangChain, LangGraph, and vector databases (FAISS, Chroma); implemented autonomous agent systems with AutoGen; and applied NLP techniques using Hugging Face Transformers for semantic search, classification, and summarization."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "education",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you study at Symbiosis Institute of Geoinformatics?",
+    "answer": "Master's degree (2007–2009). Studied spatial analysis, remote sensing, and digital image processing to address geospatial challenges in urban planning and disaster management. Learned programming, web technologies, and database systems relevant to secure and scalable GIS application development. Applied statistical techniques and spatial modeling for analytical problem-solving in geospatial contexts."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "education",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What did you study at Guru Gobind Singh Indraprastha University?",
+    "answer": "Bachelor of Technology (2001–2005). Learned C, C++, JavaScript, HTML, and CSS as part of full-stack development training. Studied building and managing databases using SQL, PL/SQL, RDBMS, and NoSQL systems. Applied OOP principles and Agile practices. Created responsive web apps. Worked with Windows, Linux, and Unix environments. Understood network protocols, TCP/IP, and routing. Explored data structures and algorithms."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "certifications",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What certifications do you hold?",
+    "answer": "Certified ScrumMaster (CSM) from Scrum Alliance (Jan 2019, License #997564), Deutsch B1 Zertifikat from telc GmbH (Dec 2018), Python Certified Entry-Level Programmer (PCEP) from Python Institute (Jan 2025), and AI Engineering certificate from Masterschool (Aug 2025)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX-Forecasting project?",
+    "answer": "MASX-Forecasting is an autonomous strategic forecasting system using a multi-agent approach with LlamaIndex and LangGraph. It features 23 doctrine-based agents (including Sun Tzu, Chanakya, Clausewitz, Machiavelli, Kissinger, and others) that analyze geopolitical events through probabilistic forecasting. The system uses GDELT integration for real-time event data, a hexagonal architecture pattern, and supports multiple LLM providers (OpenAI, Mistral, Together AI). Tech stack: Python 3.12+, LlamaIndex, LangGraph, FastAPI, Supabase, PostgreSQL, Redis. Repository: https://github.com/AteetVatan/masx-forecasting"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX-GeoSignal project?",
+    "answer": "MASX-GeoSignal (MASX-GSGI) is a Global Security & Geopolitical Intelligence system — a high-throughput multilingual news ingestion + NLP enrichment pipeline. It processes 10,000+ multilingual news URLs/day through a fully automated pipeline: async HTTP fetching, 4-method text extraction ensemble (Trafilatura, readability-lxml, jusText, BoilerPy3), fastText language detection, argostranslate title translation, NER using distilbert-multilingual, geo-entity resolution, SHA-256 + MinHash LSH deduplication, sentence-transformer embeddings stored in pgvector, kNN + Union-Find clustering, two-stage summarization (DistilBART + LLM), hotspot scoring, and webhook alerts. It operates in three cost tiers: Tier A ($6/mo CPU-only), Tier B ($6/mo balanced), Tier C ($7/mo with LLM summaries). Tech stack: Python 3.12+, SQLAlchemy 2.0, asyncpg, pgvector, FastAPI, Docker. Repository: https://github.com/AteetVatan/masx-geosignal"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX-Hotspots project?",
+    "answer": "MASX-Hotspots is an Autonomous Global Intelligence Platform for 24/7 flashpoint detection, analysis, and forecasting using multi-agent AI orchestration. It performs a full-scale internet scan daily at 00:00 UTC, processing real-time geopolitical data to detect, extract, and classify emerging flashpoints. Features: 18 LangGraph agent implementations, fan-out/fan-in parallel processing, 50+ language support, dual-source aggregation (Google News RSS + GDELT), domain classification, query planning, language detection, fact checking, and a comprehensive REST API. It uses a two-subsystem architecture: Agent Hub (intelligence engine) and API Server (data access layer). Tech stack: Python 3.12+, LangGraph, LangChain, CrewAI, AutoGen, OpenAI GPT-4, Mistral AI, FastAPI, Supabase, SpaCy, NLLB translation model, Docker. Repository: https://github.com/AteetVatan/masx-hotspots"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the ApplyBots project?",
+    "answer": "ApplyBots is an AI-powered job application automation platform. It uses AutoGen multi-agent orchestration with specialized agents (CV Agent, Cover Letter Agent, Job Matcher Agent, Truth-Lock Agent) to generate tailored application materials. Key features include Truth-Lock Technology that ensures AI-generated content strictly adheres to verified source data (no hallucination), RAG-powered context retrieval using ChromaDB, and multi-format output generation. Tech stack: Python, AutoGen, FastAPI, ChromaDB, LangChain. Repository: https://github.com/AteetVatan/ApplyBots"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the Galileo project?",
+    "answer": "Galileo Arena is an AI LLM evaluation platform using adversarial debate to assess truthfulness and evidence-grounding. It implements the Galileo Test principle: LLMs compete in structured debates with scoring on accuracy, evidence quality, and reasoning. Features include multi-agent adversarial evaluation, configurable LLM providers (OpenAI, Anthropic, Google, Mistral, local models), dataset-driven testing, and comprehensive scoring metrics. Tech stack: Python, FastAPI, LangChain. Repository: https://github.com/AteetVatan/Galileo"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the ShotGraph project?",
+    "answer": "ShotGraph is an AI cinematic video generation pipeline. It uses a multi-agent architecture for converting text scripts into cinematic video sequences with visual continuity. Features include cost-optimized LLM routing across multiple providers, visual continuity tracking for character and scene consistency, and diffusion model integration for image generation. It supports both CPU and GPU execution profiles. Tech stack: Python, FastAPI, LlamaIndex, diffusion models, structured prompt engineering. Repository: https://github.com/AteetVatan/ShotGraph"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MedAI project?",
+    "answer": "MedAI is a clinical speech and documentation platform built for physiotherapy clinics operating in German-speaking environments. It features real-time speech-to-text using Faster-Whisper (local) with Together AI cloud fallback, medical entity recognition (NER) with ICD-10 coding via an external microservice, LLM-powered clinical summarization using Mixtral 8x7B, multi-language translation (DE/EN/FR/ES/IT), and PDF clinical report generation. The Agno-based Clinical Intake Agent orchestrates the full pipeline. Tech stack: Python 3.12+, FastAPI, WebSockets, Faster-Whisper, Mixtral 8x7B (Mistral API), Supabase (Postgres + S3), WeasyPrint/ReportLab for PDF, vanilla JS frontend. Repository: https://github.com/AteetVatan/medai"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the EchoAI project?",
+    "answer": "EchoAI is a real-time voice-interactive AI system using RAG for autonomous conversations. It features low-latency STT/TTS, RAG-powered intelligence with dual-index knowledge bases (ChromaDB for facts and evidence), agentic architecture built with LangChain, performance optimizations for sub-second response times, and a dual database approach using SQLite (local) and Supabase (cloud). The system serves as a digital persona clone capable of answering questions about the user in their voice and personality. Tech stack: Python, FastAPI, LangChain, ChromaDB, sentence-transformers, WebSockets. Repository: https://github.com/AteetVatan/echo-ai"
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "How many projects have you built?",
+    "answer": "I have built at least 8 major AI projects: MASX-Forecasting (strategic forecasting), MASX-GeoSignal (news NLP pipeline processing 10K+ URLs/day), MASX-Hotspots (flashpoint detection), ApplyBots (job application automation), Galileo (LLM evaluation), ShotGraph (AI video generation), MedAI (clinical documentation platform), and EchoAI (voice-interactive AI persona). Each is a production-grade system with end-to-end architecture."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX AI ecosystem?",
+    "answer": "The MASX AI ecosystem consists of three interconnected projects: (1) MASX-Hotspots for autonomous flashpoint detection and multilingual feed generation using 18 LangGraph agents, (2) MASX-GeoSignal for high-throughput news ingestion and NLP enrichment processing 10,000+ URLs/day, and (3) MASX-Forecasting for doctrine-grounded strategic analysis using 23 specialized agents. Together they form a comprehensive geopolitical intelligence pipeline from raw news collection to strategic forecasting."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What AI/ML frameworks and tools do you use?",
+    "answer": "LangChain, LangGraph, AutoGen, CrewAI, LlamaIndex, Hugging Face Transformers, sentence-transformers, BERT, Pydantic AI, spaCy, NLTK, fastText, ONNX, PyTorch, scikit-learn, and Model Context Protocol (MCP)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What vector databases do you use?",
+    "answer": "ChromaDB, FAISS, and pgvector with HNSW indexing."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What LLM providers have you integrated?",
+    "answer": "OpenAI (GPT-4, GPT-4o), Mistral AI (Mixtral 8x7B, Mistral Small), Together AI (Llama 3.2 3B), Anthropic Claude, Google Gemini, and OpenRouter as a multi-provider gateway. I use both cloud APIs and local model inference."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What prompt engineering techniques do you use?",
+    "answer": "Zero-shot, few-shot, chain-of-thought, function calling, structured output generation, and TOML serialization for token-efficient LLM I/O."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What databases do you work with?",
+    "answer": "PostgreSQL (with pgvector, PostGIS), Supabase, SQLite, Microsoft SQL Server, Redis, and ChromaDB. I use SQLAlchemy 2.0 with asyncpg for async database operations and Alembic for migrations."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What DevOps and deployment tools do you use?",
+    "answer": "Docker, Docker Compose, GitLab CI/CD, Azure DevOps, GitHub Actions, AWS (Lambda, ECS, S3, IAM), Railway, and Vercel. I also use Gunicorn and Uvicorn for production ASGI/WSGI serving."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What web frameworks do you use?",
+    "answer": "FastAPI (primary), Flask, ASP.NET MVC / .NET Core, Angular (v9–17), and Node.js. I also build vanilla JS frontends with WebSocket integration."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What programming languages do you know?",
+    "answer": "Python (primary), C#, TypeScript, JavaScript, C, C++, VB.NET, SQL, HTML5, and CSS."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What NLP and text processing capabilities do you have?",
+    "answer": "Named Entity Recognition (NER) using distilbert-multilingual, language detection with fastText, machine translation with argostranslate and NLLB, text extraction ensembles (Trafilatura, readability-lxml, jusText, BoilerPy3), deduplication with SHA-256 and MinHash LSH, text embeddings with sentence-transformers (all-MiniLM-L6-v2), topic classification with ONNX IPTC classifier, summarization with DistilBART and LLM APIs, and full-text search with German language support."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What GIS and geospatial skills do you have?",
+    "answer": "Geographic Information Science, geospatial data modeling, spatial query optimization, PostGIS, ArcGIS, MapInfo, Google Maps, Baidu Maps, geocoding, cartography, vector overlays and spatial visualization, dealer network geospatial planning, location-based services, MapInfo MapXtreme GIS SDK development, and UI integration with mapping libraries."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What testing and quality tools do you use?",
+    "answer": "pytest, pytest-asyncio, pytest-cov, factory-boy, faker for testing. Ruff or Black for code formatting, flake8 for linting, MyPy for strict type checking, and pre-commit hooks for Git workflow quality control."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What are your complete LinkedIn skills?",
+    "answer": "My LinkedIn lists 100+ skills including: BERT, Redis, C, C++, Generative AI, Large Language Models, Multi-agent workflows with LangGraph and AutoGen, Pydantic AI, Prompt Engineering (zero-shot, few-shot, chain-of-thought, function calling), Agentic system design and orchestration, FastAPI and Flask, Model Context Protocol (MCP), Retrieval-Augmented Generation (RAG), LangChain, AutoGen, LLM Integration, AI Workflow Automation, Python, Vector Databases, Strategic AI Simulation, C# (.NET Core), RESTful API Design, AWS (Lambda, ECS, S3, IAM), Docker, GitLab CI/CD, Azure DevOps, Angular (v9–17), TypeScript, Node.js, CI/CD Pipelines, Agile (Scrum, Kanban), Legacy Modernization, Cross-functional Collaboration, PostgreSQL, Microsoft SQL Server, Geographic Information Science, ASP.NET MVC, Entity Framework, OOP, Design Patterns, Database Design, Git, JavaScript, jQuery, d3.js, HTML5, CSS, UML, Visual Studio, ArcGIS, PostGIS, Google Maps, Geocoding, MapInfo, and LESS."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What endorsements have you received on LinkedIn?",
+    "answer": "I have received 100+ endorsements from colleagues including skills in: Python, Docker, AWS, TypeScript, LLMs, Generative AI, LangGraph, AutoGen, Prompt Engineering, Pydantic AI, FastAPI, Flask, Agentic system design, C#, .NET, Geographic Information Science, Microsoft SQL Server, PostgreSQL, OOP, Software Development, Web Development, ASP.NET MVC, jQuery, HTML5, and more. Endorsers include colleagues from IHS Markit, Pitney Bowes, and AI engineering peers."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the technology stack of MASX-GeoSignal in detail?",
+    "answer": "Language: Python 3.12+. Async HTTP: httpx (HTTP/2) + aiohttp. Database: SQLAlchemy 2.0 + asyncpg. Migrations: Alembic. Vector DB: pgvector (HNSW index). Config: Pydantic Settings. Embedding: sentence-transformers (all-MiniLM-L6-v2). Language ID: fastText LID. NER: distilbert-base-multilingual-cased-ner-hrl. Geo Resolution: pycountry. Topics: ONNX IPTC classifier. Local Summarization: DistilBART CNN (PyTorch + ONNX via optimum). Dedupe: datasketch MinHash LSH + simhash. LLM: Together AI — Llama 3.2 3B Instruct Turbo. Compression: zstandard. JSON: orjson + json-repair + rapidjson + pyjson5. Logging: structlog (JSON) + rich (console). CLI: Click. API: FastAPI + Uvicorn. Testing: pytest + pytest-asyncio + pytest-cov + factory-boy + faker. Linting: Ruff. Type Checking: MyPy (strict). Containerization: Docker + Docker Compose. Deploy: Railway or self-hosted VPS."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the technology stack of MASX-Hotspots in detail?",
+    "answer": "AI/ML: LangGraph 0.5.1, LangChain 0.3.26, CrewAI 0.140.0, AutoGen 0.9.5, OpenAI 1.93.0. Web: FastAPI 0.115.14, Uvicorn 0.35.0, Pydantic 2.11.7, HTTPX 0.28.1. Database: Supabase 2.16.0, pgvector 0.4.1, asyncpg 0.30.0, SQLAlchemy 2.0.41. NLP: SpaCy 3.8.7, Transformers 4.53.1, PyTorch 2.7.1, Sentence-Transformers 5.0.0, NLTK 3.9.1. Translation: Deep-Translator 1.11.4, NLLB (facebook/nllb-200-distilled-600M). News Sources: FeedParser 6.0.11, Newspaper3k, GDELTDoc 1.12.0. Data Processing: Pandas 2.3.0, NumPy 2.3.1, Scikit-Learn 1.7.0, Plotly 6.2.0, NetworkX 3.5. Security: PyJWT 2.10.1, bcrypt 4.3.0, OAuthLib 3.3.1. Development: Black b25.1.0, MyPy 1.16.1, Pytest 8.4.1."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the technology stack of MedAI in detail?",
+    "answer": "Runtime: Python 3.12+. Web: FastAPI 0.115 + Uvicorn 0.32. WebSocket: websockets 14.0. Validation: Pydantic 2.10. Agent: Agno 2.1.1. STT Local: faster-whisper 1.0.3. STT Cloud: Together AI whisper-large-v3. LLM: Mixtral 8x7B (Mistral API) with OpenRouter and Together AI fallbacks. NER: External microservice on Railway. Translation: deep-translator 1.11.4 (Google). Audio: imageio-ffmpeg, soundfile, pydub. Database: Supabase (Postgres + S3). PDF: WeasyPrint 62.3, ReportLab 4.0.7. Templates: Jinja2 3.1.4. Testing: pytest 8.3.4. Frontend: Vanilla HTML/CSS/JS."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What architectural patterns do you use in your projects?",
+    "answer": "Hexagonal/clean architecture (MASX-Forecasting), multi-agent orchestration with LangGraph fan-out/fan-in (MASX-Hotspots), tiered pipeline processing (MASX-GeoSignal), Agno-based agent orchestration (MedAI), RAG with dual-index knowledge bases (EchoAI), Truth-Lock anti-hallucination pattern (ApplyBots), adversarial evaluation (Galileo), singleton pattern for resource management, modular service-oriented architecture, and event-driven state machines."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What cost optimization strategies do you use in AI systems?",
+    "answer": "Dedupe-first processing to skip embeddings for duplicates (20-30% savings), cluster-first-then-summarize for 80% LLM cost reduction, translate only summaries not full articles (90% translation savings), local sentence-transformers on CPU for $0 embeddings, Together AI at $0.06/1M tokens with Llama 3.2 3B, provider-agnostic LLM abstraction for switching via env vars, tiered pipeline (pay only for needed features), and the result is 30-50x cheaper than naive per-article LLM approaches ($6.60/mo vs ~$300/mo with GPT-4o for 10K URLs/day)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What are the MASX-Forecasting doctrine agents?",
+    "answer": "23 doctrine-based agents including strategic thinkers like Sun Tzu, Chanakya, Clausewitz, Machiavelli, Kissinger, Thucydides, Kautilya, Bismarck, and others. Each agent applies a specific strategic doctrine framework to analyze geopolitical events, generating probabilistic forecasts through multi-perspective reasoning. A master LLM synthesizes all agent analyses into final forecasts."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What agents does MASX-Hotspots use?",
+    "answer": "18 LangGraph agent implementations: Flashpoint LLM Agent, Flashpoint Validator Agent, Domain Classifier Agent, Query Planner Agent, Language Agent, Translation Agent, Google RSS Feeder Agent, GDELT Feed Agent, Feed Finalizer Agent, plus additional agents for Event Analysis, Fact Checking, Language Resolution, News Fetching, Validation, Logging/Auditing, Memory Management, and Merge Deduplication."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What MedAI services and capabilities exist?",
+    "answer": "STT Service (Faster-Whisper local + Together AI cloud fallback with real-time streaming), Medical NER Service (external microservice on Railway for ICD-10 coding with entity confidence scoring), LLM Service (Mixtral 8x7B with cascading fallbacks to OpenRouter and Together AI, temperature 0.0 for deterministic output), Translation Service (Google Translator for DE/EN/FR/ES/IT), Storage Service (Supabase Postgres with Row-Level Security and S3 signed URLs), Report Service (LLM-powered clinical field extraction with PDF generation via WeasyPrint/ReportLab), Audio Processor (FFmpeg in-memory format conversion, RMS normalization, silence trimming), and Cache Manager (thread-safe in-memory TTL cache)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "How does the ApplyBots Truth-Lock Technology work?",
+    "answer": "Truth-Lock Technology ensures AI-generated content strictly adheres to verified source data from the user's CV and profile. It prevents hallucination by constraining the LLM's output to only reference verified facts. The system uses RAG retrieval from ChromaDB with the user's actual data, and every generated claim is traceable back to source documents. This ensures that job application materials (CVs, cover letters) contain only truthful, verifiable information."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "How does the Galileo Test work for LLM evaluation?",
+    "answer": "The Galileo Test implements adversarial debate between LLMs: models compete in structured debates where they must defend claims with evidence. Scoring evaluates accuracy, evidence quality, and reasoning strength. It supports configurable LLM providers and dataset-driven testing to systematically assess model truthfulness and evidence-grounding capabilities."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What IHS Markit projects did you develop?",
+    "answer": "At IHS Markit I developed large-scale automotive data visualization platforms, multi-region forecasting tools, enterprise-grade geospatial analytics platforms, interactive map overlays with live SQL Server data, dealer network analysis and territory forecasting tools, and decision support systems used by 20+ automotive clients across 7 continents. I integrated over 1M+ geolocation records for real-time analysis."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What are the key GitHub repositories?",
+    "answer": "https://github.com/AteetVatan/masx-forecasting (MASX-Forecasting), https://github.com/AteetVatan/masx-geosignal (MASX-GeoSignal), https://github.com/AteetVatan/masx-hotspots (MASX-Hotspots), https://github.com/AteetVatan/ApplyBots (ApplyBots), https://github.com/AteetVatan/Galileo (Galileo), https://github.com/AteetVatan/ShotGraph (ShotGraph), https://github.com/AteetVatan/medai (MedAI), https://github.com/AteetVatan/echo-ai (EchoAI)."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What data sources does MASX AI integrate?",
+    "answer": "GDELT (Global Database of Events, Language, and Tone) for structured event data, Google News RSS for real-time global news, Google Search API for flashpoint detection, async HTTP fetching of 10,000+ multilingual news URLs/day, and custom RSS/Atom feed parsing via FeedParser. The system processes news in 50+ languages with automatic translation and entity extraction."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX-GeoSignal clustering design?",
+    "answer": "Clusters are formed strictly per flashpoint_id. For each flashpoint, the system gathers all non-duplicate embedded entries, builds a full cosine similarity matrix from normalized embeddings, finds k nearest neighbors above a configurable threshold (default 0.65), uses Union-Find to find connected components, sorts components by size descending, assigns dense-rank cluster IDs (1, 2, 3...), and writes results to cluster_members and news_clusters tables."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "projects",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is the MASX-GeoSignal extraction ensemble?",
+    "answer": "A 4-method cascade to maximize text extraction success from raw HTML: (1) Trafilatura with favor_recall, (2) readability-lxml if under minimum length, (3) jusText if still under minimum, (4) BoilerPy3 as final fallback. If all methods fail, the system detects reasons: js_required triggers Playwright, paywall triggers mark-and-skip, consent pages trigger Playwright."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What methodologies do you follow?",
+    "answer": "Agile (Scrum, Kanban), end-to-end Software Development Lifecycle (SDLC), full-cycle delivery ownership, cross-functional collaboration across 3+ continents, multi-site team coordination, stakeholder requirement gathering, legacy modernization, CI/CD pipeline engineering, and AI-first engineering standards."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What async and concurrency tools do you use?",
+    "answer": "Python asyncio, httpx with HTTP/2, aiohttp, asyncpg for async PostgreSQL, ProcessPoolExecutor and ThreadPoolExecutor for parallelism, APScheduler for task scheduling, nest_asyncio for nested event loops, asyncio-throttle for rate limiting, and domain-level circuit breakers for fault-tolerant HTTP requests."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "skills",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What security and compliance features do you implement?",
+    "answer": "PII stripping before LLM calls (German medical text patterns), signed URLs with time-limited access, Row-Level Security (RLS) policies for multi-tenant data isolation, compliance audit logging with user/action/resource/timestamp tracking, API key-based authentication, CORS middleware, rate limiting, JWT tokens, bcrypt password hashing, OAuth implementation, and encryption for sensitive configuration."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is your geo-location?",
+    "answer": "Essen, North Rhine-Westphalia, Germany."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What industry are you from?",
+    "answer": "IT Services and IT Consulting, with deep experience in automotive software, geospatial intelligence, healthcare AI, and strategic defense/intelligence applications."
+  },
+  {
+    "doc_type": "career",
+    "tags": [
+      "career",
+      "personal",
+      "rag-dataset",
+      "temperature-0",
+      "career"
+    ],
+    "question": "What is your blog URL?",
+    "answer": "https://ateetai.vercel.app/blog — I publish technical articles about AI architectures and performance."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career",
+      "timeline",
+      "hr",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Can you summarize your career transition into AI?",
+    "answer": "I left IHS Markit (S&P Global) in December 2024 and intentionally pivoted my career into AI. In 2025, I completed an AI specialization, then built real systems through freelance AI projects. From November 2025, I joined 12IQ as a Co-Founder and led architecture plus end-to-end development of a deterministic AI platform. The MVP is delivered, and I'm now exploring new AI opportunities due to delays in project funding."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career",
+      "background",
+      "enterprise",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What did you do before moving into AI?",
+    "answer": "Before AI, I worked at IHS Markit (S&P Global) and gained deep experience building and shipping production systems with strong engineering discipline, reliability standards, and cross-team delivery."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career_transition",
+      "hr",
+      "interview",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Why did you leave IHS Markit (S&P Global) in December 2024?",
+    "answer": "I left in December 2024 because I wanted to transform my career completely into AI and focus full-time on building AI systems and products."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "education",
+      "career_transition",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What did you do in 2025 to move into AI?",
+    "answer": "In 2025, I completed a specialization in AI and then applied it hands-on by delivering freelance AI projects, focusing on real integration and production-style system building rather than just theory."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "freelance",
+      "experience",
+      "ai_projects",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What kind of freelance AI work did you do after your specialization?",
+    "answer": "I worked on freelance AI projects where I built practical AI capabilities end-to-end, typically involving LLM integrations, automation workflows, structured outputs, and production-minded engineering around reliability and deployment."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "experience",
+      "12iq",
+      "leadership",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is your role at 12IQ and when did you start?",
+    "answer": "I started at 12IQ in November 2025 as a Co-Founder. I led the platform architecture and hands-on development as the Python lead, and drove the technical delivery of the MVP."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "deterministic_ai",
+      "platform",
+      "architecture",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What did you build at 12IQ?",
+    "answer": "I led the architecture and end-to-end development of a large-scale deterministic AI platform focused on predictable, auditable intelligence workflows."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "architecture",
+      "execution_spine",
+      "orchestration",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What do you mean by a 'single deterministic execution spine'?",
+    "answer": "It means the system has one consistent, execution-driven control path that coordinates orchestration, context management, knowledge processing, reasoning, and multi-model validation in a predictable and auditable way."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "agents",
+      "orchestration",
+      "reliability",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What orchestration patterns did you design?",
+    "answer": "I designed agent orchestration patterns that enforce execution order, context propagation, budget control, fault isolation, and confidence scoring to keep outcomes predictable and debuggable."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "data_infra",
+      "databases",
+      "platform",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What infrastructure did you build to support the AI platform?",
+    "answer": "I built a multi-database AI infrastructure across relational, document, graph, vector, and cache layers to support persistent reasoning state and continuous learning."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "python",
+      "engineering",
+      "delivery",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What was your hands-on contribution as the Python lead?",
+    "answer": "I led hands-on implementation in Python, defined core abstractions and data contracts, and set CI/CD standards to ensure production-grade reliability and scalable delivery."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "leadership",
+      "mentoring",
+      "hiring",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Did you lead other engineers at 12IQ?",
+    "answer": "Yes. I led technical delivery, interviewed candidates, mentored engineers and interns, and guided execution to ship the MVP."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "mvp",
+      "delivery",
+      "results",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What is the current status of the 12IQ product?",
+    "answer": "The MVP is delivered."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "hr",
+      "reason_for_change",
+      "interview",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Why are you looking for new opportunities now?",
+    "answer": "The MVP has been delivered, but funding timelines were delayed. I want to continue building and scaling agentic AI platforms in an environment with stable execution capacity and clear runway."
+  },
+  {
+    "doc_type": "about_me",
+    "tags": [
+      "career",
+      "target_roles",
+      "hr",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "What kind of roles are you targeting next?",
+    "answer": "I'm targeting AI Architect / AI Engineer / Platform Engineer roles focused on building production-grade agentic systems—especially deterministic orchestration, evaluation/validation, and strong data infrastructure."
+  },
+  {
+    "doc_type": "experience",
+    "tags": [
+      "work_experience",
+      "12iq",
+      "ai_architect",
+      "co-founder",
+      "current",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Describe your experience at 12IQ Inc.",
+    "answer": "AI Architect & Co-Founder at 12IQ Inc (Nov 2025 – Present). Leading architecture and end-to-end development of a large-scale Deterministic AI platform focused on predictable, auditable, and intelligence workflows. Architected a modular, execution-driven AI system with a single deterministic execution spine, coordinating orchestration, context management, knowledge processing, reasoning, and multi-model validation. Designed agent orchestration patterns enforcing execution order, context propagation, budget control, fault isolation, and confidence scoring. Built multi-database AI infrastructure (relational, document, graph, vector, cache) to support persistent reasoning state and continuous learning. Hands-on Python lead, defining core abstractions, data contracts, and CI/CD standards for production-grade reliability and scalability. Leading technical delivery, interviewing, mentoring, and guiding engineers and interns."
+  },
+  {
+    "doc_type": "experience",
+    "tags": [
+      "work_experience",
+      "freelance",
+      "ai_engineering",
+      "career_transition",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Describe your freelancing and professional development phase (Dec 2024 – Oct 2025).",
+    "answer": "Freelance Consulting & Strategic Transition into AI Engineering (Dec 2024 – Oct 2025), Germany. Transitioned into AI Engineering through an intensive learning and mentoring program at Masterschool Institute of Technology, Berlin, followed with independent freelance-style project execution and real-world system development. Designed and engineered three AI platforms (mainly Python): Med AI (Healthcare Automation), MASX AI (Geopolitical Forecasting), and Echo AI (Personal AI Clone). Delivered functional AI prototypes for prospective clients, showcasing applied expertise in multi-agent systems, real-time data pipelines, RAG architectures, and LLM integrations (OpenAI, Mistral, Hugging Face). Built reusable orchestration templates within the MASX AI architecture, enabling consistent CI/CD automation, testing, and cloud-ready deployment for multi-agent and RAG pipelines."
+  },
+  {
+    "doc_type": "experience",
+    "tags": [
+      "work_experience",
+      "ihs_markit",
+      "senior_software_engineer",
+      "enterprise",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Describe your experience as Senior Software Engineer at IHS Markit.",
+    "answer": "Senior Software Engineer at IHS Markit (Jul 2017 – Nov 2024), Essen, Germany. Owned platform migration and project delivery across backend/frontend, leading a team of 5+. Directed deployments, system validation, and CI/CD pipelines. Aligned with global stakeholders across 3 continents. Engineered secure, async-ready APIs and dashboards using Python, C#, Node.js, and AWS (Lambda, ECS). Migrated 10+ legacy applications to AWS and Angular, reducing latency by 40% and accelerating deployment cycles by 60%. Built CI/CD pipelines using GitLab, Docker, and Azure DevOps, cutting deployment errors and shortening release timelines by over 60%."
+  },
+  {
+    "doc_type": "experience",
+    "tags": [
+      "work_experience",
+      "ihs_markit",
+      "software_engineer",
+      "analytics",
+      "automotive",
+      "rag-dataset",
+      "temperature-0"
+    ],
+    "question": "Describe your experience as Software Engineer at IHS Markit.",
+    "answer": "Software Engineer at IHS Markit (Mar 2012 – Jul 2017), Essen/Leverkusen, Germany. Delivered end-to-end digital analytics systems for enterprise automotive clients across 7 continents. Developed scalable analytics platforms using C#, VB.NET, serving 20+ global clients. Ensured data integrity, secure deployments, and continuous system enhancements through collaboration with cross-functional teams. Documented technical flows and validation steps for production deployments. Ensured data compliance and secure architecture across platforms."
   }
 ]

@@ -1,0 +1,55 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4f46e5'}}}%%
+flowchart TD
+    subgraph "Input Processing"
+        IN1["WebSocket Audio"] --> DECODE["Audio Decode & Normalize"]
+        IN2["Text Message"] --> DIRECT["Direct Text Input"]
+        IN3["Streaming Buffer"] --> ACCUMULATE["Chunk Accumulator"]
+        ACCUMULATE --> DECODE
+    end
+
+    subgraph "STT Stage"
+        DECODE --> FW["Faster-Whisper Local"]
+        FW -->|"Failure"| OW["OpenAI Whisper API"]
+        FW --> TEXT["Transcribed Text"]
+        OW --> TEXT
+    end
+
+    subgraph "RAG Stage"
+        TEXT --> RC{"Reply Cache Lookup"}
+        DIRECT --> RC
+        RC -->|"Exact Hash Match"| HIT["Cache Hit"]
+        RC -->|"Semantic ≥95%"| HIT
+        RC -->|"Miss"| QR["Query Router"]
+        QR -->|"factual/default"| FACTS["Facts Index Search"]
+        QR -->|"evidence"| EVIDENCE["Evidence Index Search"]
+        QR -->|"timeline/both"| BOTH["Dual-Index Search"]
+        FACTS --> MERGE["Hybrid Merge — Vector + BM25"]
+        EVIDENCE --> MERGE
+        BOTH --> MERGE
+        MERGE --> RAGCHAIN["LangChain RAG Chain"]
+        MERGE -->|"No Docs"| DIRECTLLM["Direct LLM Call"]
+    end
+
+    subgraph "LLM Stage"
+        RAGCHAIN --> DS["DeepSeek AI Primary"]
+        DIRECTLLM --> DS
+        DS -->|"Failure"| MI["Mistral AI Fallback"]
+        DS --> RESP["Response Text"]
+        MI --> RESP
+    end
+
+    subgraph "TTS Stage"
+        RESP --> TC{"TTS Cache Check"}
+        TC -->|"Cached"| CAUDIO["Cached Audio"]
+        TC -->|"Miss"| EDGE["Edge-TTS Synthesis"]
+        EDGE --> NAUDIO["New Audio"]
+        NAUDIO --> STORE["Store in Cache"]
+    end
+
+    subgraph "Output"
+        HIT --> WS["WebSocket Response"]
+        CAUDIO --> WS
+        NAUDIO --> WS
+        STORE --> SQLITE[("SQLite DB")]
+        STORE --> CHROMA[("ChromaDB")]
+    end

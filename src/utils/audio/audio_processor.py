@@ -27,9 +27,9 @@ class AudioProcessor:
     """
 
     def __init__(self):
-        self.target_sample_rate: int = int(getattr(settings, "SAMPLE_RATE", 16000))
-        self.target_channels: int = int(getattr(settings, "CHANNELS", 1))
-        self.target_format: str = getattr(settings, "AUDIO_FORMAT", "wav")
+        self.target_sample_rate: int = settings.SAMPLE_RATE
+        self.target_channels: int = settings.CHANNELS
+        self.target_format: str = settings.AUDIO_FORMAT
         self.ffmpeg_path: str = get_ffmpeg_exe()
         if not self.ffmpeg_path or not os.path.exists(self.ffmpeg_path):
             raise RuntimeError("FFmpeg not available via imageio-ffmpeg.")

@@ -15,19 +15,20 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # API Keys
-    #HUGGINGFACE_API_KEY: str = Field(..., env="HUGGINGFACE_API_KEY")
+    DEEPSEEK_API_KEY: str = Field(..., env="DEEPSEEK_API_KEY")
     OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
     MISTRAL_API_KEY: str = Field(..., env="MISTRAL_API_KEY")
     
-    # Model Configuration
-    #DEFAULT_STT_MODEL: str = Field("openai/whisper-large-v3", env="DEFAULT_STT_MODEL")
     FALLBACK_STT_MODEL: str = Field("openai/whisper-1", env="FALLBACK_STT_MODEL")
+    DEEPSEEK_MODEL: str = Field("deepseek-chat", env="DEEPSEEK_MODEL")
     MISTRAL_MODEL: str = Field("mistral-small", env="MISTRAL_MODEL")
     OPENAI_MODEL: str = Field("gpt-4o-mini", env="OPENAI_MODEL")
    
     
-    # Mistral Configuration
+    # DeepSeek Configuration (Primary LLM)
+    DEEPSEEK_API_BASE: str = Field("https://api.deepseek.com", env="DEEPSEEK_API_BASE")
+    
+    # Mistral Configuration (Fallback LLM)
     MISTRAL_API_BASE: str = Field("https://api.mistral.ai", env="MISTRAL_API_BASE")
     
     # Edge-TTS Configuration
@@ -39,12 +40,25 @@ class Settings(BaseSettings):
     TTS_STREAMING: bool = Field(True, env="TTS_STREAMING")
     TTS_CACHE_ENABLED: bool = Field(True, env="TTS_CACHE_ENABLED")
     
+    # Self-Info RAG Knowledge Base
+    EMBEDDING_MODEL: str = Field("all-MiniLM-L6-v2", env="EMBEDDING_MODEL")
+    SELF_INFO_JSON_PATH: str = Field("src/documents/self_info.json", env="SELF_INFO_JSON_PATH")
+    SELF_INFO_CHROMA_DIR: str = Field("src/db/self_info_knowledge_v2", env="SELF_INFO_CHROMA_DIR")
+    SELF_INFO_REBUILD: bool = Field(False, env="SELF_INFO_REBUILD")
+    EVIDENCE_DOCS_DIR: str = Field("rag_persona_db/document", env="EVIDENCE_DOCS_DIR")
+    
+    # Reply Cache Vector Store
+    REPLY_CACHE_CHROMA_DIR: str = Field("src/db/chroma_db", env="REPLY_CACHE_CHROMA_DIR")
+    
     # Supabase DB
     SUPABASE_URL: str = Field(..., env="SUPABASE_URL")
     SUPABASE_ANON_KEY: str = Field(..., env="SUPABASE_ANON_KEY")
     SUPABASE_SERVICE_ROLE_KEY: str = Field(..., env="SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_DB_PASSWORD: str = Field(..., env="SUPABASE_DB_PASSWORD")
     SUPABASE_DB_URL: str = Field(..., env="SUPABASE_DB_URL")
+    
+    # HuggingFace Configuration
+    HF_TOKEN: str = Field("", env="HF_TOKEN")
     
     # Server Configuration
     HOST: str = Field("0.0.0.0", env="HOST")
@@ -62,9 +76,23 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: float = Field(10.0, env="LLM_TIMEOUT")
     TTS_TIMEOUT: float = Field(8.0, env="TTS_TIMEOUT")
     
+    # Security Configuration
+    ECHOAI_API_KEY: str = Field("", env="ECHOAI_API_KEY")
+    ALLOWED_ORIGINS: str = Field("http://localhost:3000,http://localhost:8000", env="ALLOWED_ORIGINS")
+    RATE_LIMIT_PER_MINUTE: int = Field(30, env="RATE_LIMIT_PER_MINUTE")
+    WS_MSG_RATE_LIMIT: int = Field(20, env="WS_MSG_RATE_LIMIT")
+    MAX_WS_CONNECTIONS_PER_IP: int = Field(5, env="MAX_WS_CONNECTIONS_PER_IP")
+    MAX_TEXT_LENGTH: int = Field(2000, env="MAX_TEXT_LENGTH")
+
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
+    
+    def model_post_init(self, __context):
+        """Inject HF_TOKEN into os.environ so HuggingFace libraries can find it."""
+        if self.HF_TOKEN:
+            os.environ["HF_TOKEN"] = self.HF_TOKEN
 
 
 # Global settings instance
@@ -84,6 +112,7 @@ def validate_api_keys() -> bool:
         bool: True if all keys are present, False otherwise
     """
     required_keys = [        
+        settings.DEEPSEEK_API_KEY,
         settings.OPENAI_API_KEY,
         settings.MISTRAL_API_KEY
     ]
@@ -91,5 +120,5 @@ def validate_api_keys() -> bool:
     return all(key and key != "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
                and key != "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                and key != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-               and key != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+               and key != "your-deepseek-api-key-here"
                for key in required_keys) 

@@ -1,0 +1,42 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#059669'}}}%%
+flowchart TD
+    INPUT["User Query"] --> L1
+
+    subgraph "Level 1 — In-Memory LRU Cache"
+        L1{"In-Memory Dict<br/>(max 1000 entries)"}
+        L1 -->|"Hit"| L1_HIT["Instant Return<br/>(~0ms)"]
+        L1 -->|"Miss"| L2
+    end
+
+    subgraph "Level 2 — Reply Cache (Hash + Semantic)"
+        L2{"MD5 Hash Lookup<br/>(SQLite)"}
+        L2 -->|"Exact Match"| L2_HIT["Return Cached Response<br/>+ Audio File"]
+        L2 -->|"Miss"| L3
+        L3{"Semantic Search<br/>(ChromaDB ≥95%)"}
+        L3 -->|"Semantic Hit"| L3_HIT["Return Similar Response<br/>+ Audio File"]
+        L3 -->|"Miss"| KB
+    end
+
+    subgraph "Level 3 — Knowledge Base RAG"
+        KB["Query Router<br/>(facts/evidence/both)"]
+        KB --> SEARCH["Hybrid Search<br/>(Vector + BM25)"]
+        SEARCH --> CHAIN["LangChain RAG Chain"]
+        CHAIN --> LLM["LLM Generation<br/>(DeepSeek / Mistral)"]
+    end
+
+    subgraph "Level 4 — TTS Audio Cache"
+        LLM --> TTS_CHECK{"TTS Audio<br/>Already Cached?"}
+        TTS_CHECK -->|"Hit"| TTS_HIT["Load Cached Audio<br/>from Disk"]
+        TTS_CHECK -->|"Miss"| TTS_GEN["Edge-TTS Synthesis"]
+        TTS_GEN --> TTS_STORE["Store Audio<br/>(SQLite metadata + file)"]
+    end
+
+    subgraph "Response & Cache Update"
+        L1_HIT --> RESPOND["🔊 Response to Client"]
+        L2_HIT --> RESPOND
+        L3_HIT --> RESPOND
+        TTS_HIT --> RESPOND
+        TTS_STORE --> RESPOND
+        LLM --> CACHE_UPDATE["Store in Reply Cache<br/>(SQLite + ChromaDB)"]
+        CACHE_UPDATE --> MEM_UPDATE["Update In-Memory Cache"]
+    end

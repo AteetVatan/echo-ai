@@ -21,7 +21,7 @@ class DBOperationsPostgres:
         os.makedirs(self.AUDIO_DIR, exist_ok=True)
         # Remove asyncio.run() calls - will be initialized separately
         async def test():
-            conn = await asyncpg.connect(self.settings.SUPABASE_DB_URL, ssl="require")
+            conn = await asyncpg.connect(self.settings.SUPABASE_DB_URL, ssl="require", statement_cache_size=0)
             print(await conn.fetchval("SELECT version()"))
             await conn.close()
                         
@@ -41,6 +41,7 @@ class DBOperationsPostgres:
                 min_size=1,
                 max_size=5,
                 command_timeout=60,
+                statement_cache_size=0,
                 server_settings={"application_name": "masx_ai_audio"},
             )
             self.logger.info("Database pool initialized")

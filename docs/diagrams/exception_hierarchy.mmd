@@ -1,0 +1,42 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#dc2626'}}}%%
+classDiagram
+    class EchoAIError {
+        <<Base Exception>>
+        Base exception for all EchoAI errors
+    }
+
+    class STTError {
+        Speech-to-Text processing failure
+    }
+
+    class LLMError {
+        Language-model generation failure
+    }
+
+    class TTSError {
+        Text-to-Speech synthesis failure
+    }
+
+    class RAGError {
+        RAG retrieval or agent failure
+    }
+
+    class PipelineError {
+        Voice-pipeline orchestration failure
+    }
+
+    class DatabaseError {
+        Database operation failure
+    }
+
+    class AudioProcessingError {
+        Audio conversion / processing failure
+    }
+
+    EchoAIError <|-- STTError
+    EchoAIError <|-- LLMError
+    EchoAIError <|-- TTSError
+    EchoAIError <|-- RAGError
+    EchoAIError <|-- PipelineError
+    EchoAIError <|-- DatabaseError
+    EchoAIError <|-- AudioProcessingError

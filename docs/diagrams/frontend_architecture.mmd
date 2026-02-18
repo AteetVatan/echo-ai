@@ -1,0 +1,56 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0070f3', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#0050d3', 'secondaryColor': '#10b981', 'tertiaryColor': '#8b5cf6'}}}%%
+flowchart TD
+    subgraph "Next.js App Router"
+        LAYOUT["layout.tsx — RootLayout (HTML, Fonts, Metadata)"]
+        SHELL["LayoutShell — Header + Footer wrapper"]
+        HOME_PAGE["page.tsx — Landing Page (/)"]
+        CHAT_PAGE["chat/page.tsx — Chat Page (/chat)"]
+        ERROR["error.tsx — Error Boundary"]
+    end
+
+    subgraph "Landing Page Components"
+        HERO["HeroSection — CTA + Animated text"]
+        FEATURES["FeaturesSection — Feature cards grid"]
+        STATS["StatsBar — Live statistics counters"]
+        NEURAL["NeuralBackground — Canvas particle animation"]
+        AIVIZ["AIVisualization — 3D-style AI visual"]
+    end
+
+    subgraph "Chat Components"
+        CONTAINER["ChatContainer — Main chat orchestrator"]
+        INPUT["ChatInput — Text + voice input bar"]
+        BUBBLE["MessageBubble — User/AI message display"]
+        TYPING["TypingIndicator — AI thinking animation"]
+    end
+
+    subgraph "Shared Layout"
+        HEADER["Header — Navigation + branding"]
+        FOOTER["Footer — Links + credits"]
+    end
+
+    subgraph "Data Layer"
+        HOOK["useChat Hook — WebSocket + state management"]
+        API_LIB["lib/api.ts — API base URL config"]
+        TYPES["lib/types.ts — TypeScript interfaces"]
+    end
+
+    subgraph "Backend Connection"
+        WS["WebSocket ws://host:8000/ws/{sessionId}"]
+        REST["REST API http://host:8000/api/*"]
+    end
+
+    LAYOUT --> SHELL
+    SHELL --> HEADER & FOOTER
+    LAYOUT --> HOME_PAGE & CHAT_PAGE & ERROR
+
+    HOME_PAGE --> HERO & FEATURES & STATS
+    HOME_PAGE --> NEURAL & AIVIZ
+
+    CHAT_PAGE --> CONTAINER
+    CONTAINER --> INPUT & BUBBLE & TYPING
+    CONTAINER --> HOOK
+
+    HOOK --> WS
+    HOOK --> API_LIB
+    HOOK --> TYPES
+    API_LIB --> REST

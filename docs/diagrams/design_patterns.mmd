@@ -1,0 +1,58 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#6366f1', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#4f46e5', 'secondaryColor': '#f59e0b', 'tertiaryColor': '#10b981'}}}%%
+flowchart LR
+    subgraph "Pipeline Pattern"
+        PP1["VoicePipeline"]
+        PP2["STT → RAG → LLM → TTS"]
+        PP1 --> PP2
+    end
+
+    subgraph "Strategy Pattern"
+        SP1["STT Strategy"]
+        SP2["Faster-Whisper (primary)"]
+        SP3["OpenAI Whisper (fallback)"]
+        SP4["LLM Strategy"]
+        SP5["DeepSeek AI (primary)"]
+        SP6["Mistral AI (fallback)"]
+        SP1 --> SP2 & SP3
+        SP4 --> SP5 & SP6
+    end
+
+    subgraph "Repository Pattern"
+        RP1["DBOperations (SQLite)"]
+        RP2["DBOperationsPostgres (Supabase)"]
+        RP3["ChromaDB VectorStore"]
+        RP1 & RP2 & RP3
+    end
+
+    subgraph "Facade Pattern"
+        FP1["SelfInfoRAG"]
+        FP2["QueryRouter"]
+        FP3["SelfInfoRetriever"]
+        FP4["SelfInfoVectorStore"]
+        FP5["EvidenceLoader"]
+        FP1 --> FP2 & FP3 & FP4 & FP5
+    end
+
+    subgraph "Cache-Aside Pattern"
+        CP1["L1: In-Memory LRU"]
+        CP2["L2: MD5 Hash (SQLite)"]
+        CP3["L3: Semantic (ChromaDB)"]
+        CP4["L4: TTS Audio Disk"]
+        CP1 --> CP2 --> CP3 --> CP4
+    end
+
+    subgraph "Observer Pattern"
+        OP1["ConnectionManager"]
+        OP2["WebSocket Client 1"]
+        OP3["WebSocket Client 2"]
+        OP4["WebSocket Client N"]
+        OP1 --> OP2 & OP3 & OP4
+    end
+
+    subgraph "Chain of Responsibility"
+        CR1["QueryRouter"]
+        CR2["Factual → Facts Index"]
+        CR3["Evidence → Evidence Index"]
+        CR4["Timeline → Both Indices"]
+        CR1 --> CR2 & CR3 & CR4
+    end

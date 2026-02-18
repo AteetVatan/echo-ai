@@ -1,0 +1,41 @@
+%%{init: {'theme': 'base'}}%%
+sequenceDiagram
+    participant User
+    participant STT_Agent as STT Agent
+    participant RAG_Agent as RAG Agent
+    participant Search_Agent as Search Agent
+    participant Knowledge_Agent as Knowledge Agent
+    participant Reasoning_Agent as Reasoning Agent
+    participant TTS_Agent as TTS Agent
+    participant Memory_Layer as Memory Layer
+
+    User->>STT_Agent: 🎤 Voice Input
+    STT_Agent->>STT_Agent: Audio → Text (Faster-Whisper / OpenAI)
+    STT_Agent->>RAG_Agent: Processed Text
+
+    RAG_Agent->>Search_Agent: Initiate Semantic Search
+    Search_Agent->>Memory_Layer: Vector Database Query (Reply Cache)
+    Memory_Layer-->>Search_Agent: Similar Responses
+
+    alt Cache Hit (≥95%)
+        Search_Agent->>TTS_Agent: Retrieve Cached Audio
+        TTS_Agent->>User: 🎵 Instant Response
+    else No Cache
+        Search_Agent->>Knowledge_Agent: Search Self-Info
+        Knowledge_Agent->>Memory_Layer: Knowledge Base Query (Facts + Evidence)
+        Memory_Layer-->>Knowledge_Agent: Relevant Knowledge
+
+        alt Knowledge Available
+            Knowledge_Agent->>Reasoning_Agent: RAG Chain Processing
+            Reasoning_Agent->>Reasoning_Agent: Context + Knowledge Assembly
+            Reasoning_Agent->>Reasoning_Agent: LLM Reasoning (DeepSeek/Mistral)
+            Reasoning_Agent->>TTS_Agent: Generated Response
+        else No Knowledge
+            Knowledge_Agent->>Reasoning_Agent: Direct LLM Generation
+            Reasoning_Agent->>TTS_Agent: Generated Response
+        end
+
+        TTS_Agent->>TTS_Agent: Text → Audio (Edge-TTS)
+        TTS_Agent->>User: 🎵 Synthesized Response
+        RAG_Agent->>Memory_Layer: Store New Interaction
+    end
