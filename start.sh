@@ -36,10 +36,12 @@ echo "  nginx is running (PID $NGINX_PID) ✓"
 # ── 3. Start FastAPI backend (background) ─────────────────────────
 echo "  Starting FastAPI backend on :8000..."
 cd /app
+LOG_LEVEL="${LOG_LEVEL:-info}"
+LOG_LEVEL="${LOG_LEVEL,,}"   # uvicorn requires lowercase
 python -m uvicorn src.api.main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --log-level "${LOG_LEVEL:-info}" \
+    --log-level "$LOG_LEVEL" \
     --no-access-log &
 BACKEND_PID=$!
 
