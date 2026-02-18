@@ -26,6 +26,13 @@ const MAX_SEND_RETRIES = 30; // 3 seconds max wait for WS open
 const PING_INTERVAL_MS = 25_000; // FIX R7: keepalive every 25s
 const ERROR_DISMISS_MS = 6000; // FIX R10: auto-dismiss errors
 
+// Minimal silent MP3 (< 200 bytes) used to "unlock" the HTMLAudioElement on iOS.
+// iOS Safari blocks audio.play() unless it originates from a user gesture.
+// Playing this during the "Talk to Me" tap unlocks the element for later
+// programmatic playback.
+const SILENCE_DATA_URI =
+    "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/+0DEAAPH0ALpeAAAgAADSAAAAE//tAxAAAA0gAUAAAAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7QMQeAAO4AFAAAAAAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==";
+
 /**
  * WebSocket URL — connects directly to the FastAPI backend.
  * Next.js rewrites do NOT proxy WebSocket upgrade requests,
@@ -60,6 +67,9 @@ export function useChat() {
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const vadFrameRef = useRef<number>(0);
+    // Persistent audio element — survives across playback calls.
+    // Unlocked once during a user gesture (startTalkMode) so iOS allows
+    // later programmatic .play() calls.
     const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
     const talkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const talkStartRef = useRef<number>(0);
@@ -268,25 +278,37 @@ export function useChat() {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- uses refs intentionally
     }, []);
 
+    /* ── Persistent audio element (iOS unlock) ────────────────────── */
+
+    useEffect(() => {
+        // Create the element once — it lives for the component lifetime.
+        if (!audioPlayerRef.current) {
+            audioPlayerRef.current = new Audio();
+        }
+    }, []);
+
     /* ── Audio playback ──────────────────────────────────────────── */
 
     const playAudio = useCallback((audioUrl: string) => {
+        const audio = audioPlayerRef.current;
+        if (!audio) return;
+
         setVoiceState("speaking");
-        const audio = new Audio(audioUrl);
-        audioPlayerRef.current = audio;
+
+        // Clear previous listeners to avoid stale callbacks firing
+        audio.onended = null;
+        audio.onerror = null;
 
         audio.onended = () => {
-            audioPlayerRef.current = null;
             setVoiceState(isTalkModeRef.current ? "idle" : "chatMode");
         };
 
         audio.onerror = () => {
-            audioPlayerRef.current = null;
             setVoiceState(isTalkModeRef.current ? "idle" : "chatMode");
         };
 
+        audio.src = audioUrl;
         audio.play().catch(() => {
-            audioPlayerRef.current = null;
             setVoiceState(isTalkModeRef.current ? "idle" : "chatMode");
         });
     }, []);
@@ -434,7 +456,8 @@ export function useChat() {
         if (audioPlayerRef.current) {
             audioPlayerRef.current.pause();
             audioPlayerRef.current.currentTime = 0;
-            audioPlayerRef.current = null;
+            // Don't null the ref — we keep the element alive so iOS
+            // remembers its "unlocked" state for future playback.
         }
     }, []);
 
@@ -460,6 +483,21 @@ export function useChat() {
             source.connect(analyser);
             audioContextRef.current = audioCtx;
             analyserRef.current = analyser;
+
+            // ── iOS audio unlock ────────────────────────────────────
+            // This runs inside a user-gesture call stack (tap on
+            // "Talk to Me"), so .play() succeeds and permanently
+            // unlocks the element for later programmatic playback.
+            if (audioPlayerRef.current) {
+                const el = audioPlayerRef.current;
+                el.src = SILENCE_DATA_URI;
+                el.play()
+                    .then(() => {
+                        el.pause();
+                        el.currentTime = 0;
+                    })
+                    .catch(() => { /* unlock failed — non-fatal */ });
+            }
 
             // Connect WS if not already
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -611,6 +649,12 @@ export function useChat() {
             if (mediaStreamRef.current)
                 mediaStreamRef.current.getTracks().forEach((t) => t.stop());
             if (audioContextRef.current) audioContextRef.current.close();
+            // Clean up persistent audio element
+            if (audioPlayerRef.current) {
+                audioPlayerRef.current.pause();
+                audioPlayerRef.current.src = "";
+                audioPlayerRef.current = null;
+            }
             // FIX R4: Revoke all created blob URLs
             blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
         };
