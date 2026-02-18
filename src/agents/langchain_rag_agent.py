@@ -6,6 +6,7 @@ knowledge retrieval, and grounded answer generation capabilities.
 """
 
 import os
+import re
 import json
 import hashlib
 import time
@@ -217,6 +218,16 @@ class LangChainRAGAgent:
             - Respond in Ateet's authentic voice, reflecting his tone, values, and communication style.
             - Adapt the length, tone, and style of your answer based on the intent of the question:
 
+            QUERY INTERPRETATION (critical):
+            - Users may type short phrases, keywords, or misspelled words instead of full questions.
+            - ALWAYS interpret the user's INTENT behind their input. For example:
+              * "work experiance" or "work experience" → the user wants to know about Ateet's work/employment history
+              * "skills" → the user wants to know about Ateet's technical skills
+              * "projects" → the user wants to know about Ateet's projects
+              * "education" → the user wants to know about Ateet's education
+            - Treat short keyword queries the same as full questions — find relevant info in the CONTEXT and answer.
+            - Ignore spelling mistakes in the user's query and focus on INTENT.
+
             Intent-based response rules:
             1. If the question is a greeting, casual message, or light check-in:
             - Respond in no more than 1–2 short sentences (max ~20 words).
@@ -236,8 +247,7 @@ class LangChainRAGAgent:
 
             Special instruction:
             - If partial information is available in the CONTEXT, synthesize the best answer from what is available.
-            - ONLY if the question requests specific facts and NO relevant information exists in the CONTEXT at all, respond exactly with:
-            "I don't have specific information about that in my knowledge base."
+            - ONLY say "I don't have specific information about that in my knowledge base." if the CONTEXT contains ABSOLUTELY NOTHING related to the user's intent. If ANYTHING in the CONTEXT is relevant, use it to form an answer.
 
             Rules:
             - Always respond in English, regardless of the language of the question.
@@ -292,6 +302,53 @@ class LangChainRAGAgent:
             logger.error(f"Failed to setup RAG chain: {str(e)}")
             return None
     
+    # -----------------------------------------------------------------------
+    # Query expansion for short / misspelled inputs
+    # -----------------------------------------------------------------------
+
+    # Each pair: (compiled regex, expanded question sent to the retriever)
+    _QUERY_EXPANSIONS: list = [
+        (re.compile(r"work.*exp", re.I),
+         "What is Ateet's complete work experience and employment history?"),
+        (re.compile(r"\b(career|jobs?|employ)", re.I),
+         "What is Ateet's career history and employment timeline?"),
+        (re.compile(r"\bskills?\b", re.I),
+         "What are Ateet's technical skills and tech stack?"),
+        (re.compile(r"\beducat", re.I),
+         "What is Ateet's education and academic background?"),
+        (re.compile(r"\bproject", re.I),
+         "What projects has Ateet worked on?"),
+        (re.compile(r"\bcertif", re.I),
+         "What certifications does Ateet have?"),
+        (re.compile(r"\b(about|who|intro)", re.I),
+         "Tell me about Ateet Vatan Bahmani — his background, role, and expertise."),
+        (re.compile(r"\b(contact|email|phone|reach)", re.I),
+         "What are Ateet's contact details and how can I reach him?"),
+        (re.compile(r"\b(locat|city|countr|where.*live|based)", re.I),
+         "Where is Ateet located?"),
+        (re.compile(r"\b(hobb|interest|personal)", re.I),
+         "What are Ateet's hobbies and personal interests?"),
+    ]
+
+    def _expand_query(self, user_text: str) -> str:
+        """Expand short / keyword queries into full questions for retrieval.
+
+        If the query already looks like a proper sentence (≥5 words) it is
+        returned unchanged.  Otherwise we check against common topic patterns
+        and return a richer retrieval query while logging the expansion.
+        """
+        words = user_text.strip().split()
+        if len(words) >= 5:
+            return user_text  # already a full question
+
+        for pattern, expansion in self._QUERY_EXPANSIONS:
+            if pattern.search(user_text):
+                logger.info("Query expanded: '%s' → '%s'", user_text, expansion)
+                return expansion
+
+        # No pattern matched — return as-is
+        return user_text
+
     async def process_query(self, user_text: str, session_id: str = None) -> Dict[str, Any]:
         """
         Process user query through LangChain RAG pipeline.
@@ -319,71 +376,49 @@ class LangChainRAGAgent:
                     "processing_time": time.time() - start_time
                 }
             
-            # Step 2: Check if we have relevant self-info knowledge
-            if self.self_info_knowledge_base:
+            # Step 2: Always try RAG chain when knowledge base is available.
+            # The RAG chain's EnsembleRetriever (k=6+5) handles short,
+            # misspelled, or ambiguous queries far better than a low-k
+            # pre-flight similarity_search gate.
+            if self.self_info_knowledge_base and self.rag_chain:
                 try:
-                    # Search both facts and evidence stores for relevant docs
+                    # Handle corrupted HNSW index by attempting a quick probe
                     try:
-                        facts_docs = self.self_info_facts_store.similarity_search(user_text, k=2) if self.self_info_facts_store else []
-                        evidence_docs = self.self_info_evidence_store.similarity_search(user_text, k=2) if self.self_info_evidence_store else []
+                        self.self_info_facts_store.similarity_search(user_text, k=1)
                     except Exception as hnsw_err:
                         if "hnsw" in str(hnsw_err).lower() or "Nothing found on disk" in str(hnsw_err):
                             logger.warning("HNSW index corrupted, rebuilding self-info store...")
                             self._rebuild_self_info_stores()
-                            facts_docs = self.self_info_facts_store.similarity_search(user_text, k=2) if self.self_info_facts_store else []
-                            evidence_docs = self.self_info_evidence_store.similarity_search(user_text, k=2) if self.self_info_evidence_store else []
                         else:
                             raise
-                    knowledge_docs = facts_docs + evidence_docs
-                    
-                    if knowledge_docs and len(knowledge_docs) > 0:
-                        # Use RAG chain for grounded response from self-info
-                        try:
-                            rag_response = self.rag_chain.invoke({"query": user_text})
-                            response_text = rag_response["result"]
-                            source_docs = rag_response.get("source_documents", [])
-                            
-                            return {
-                                "response_text": response_text,
-                                "cached": False,
-                                "source": "rag_self_info",
-                                "knowledge_used": True,
-                                "source_documents": len(source_docs),
-                                "processing_time": time.time() - start_time
-                            }
-                        except Exception as rag_error:
-                            logger.error(f"RAG chain failed, using fallback LLM: {str(rag_error)}")
-                            response = await self._direct_llm_response(user_text, use_fallback=True)
-                            return {
-                                "response_text": response,
-                                "cached": False,
-                                "source": "llm_fallback",
-                                "knowledge_used": False,
-                                "rag_error": str(rag_error),
-                                "processing_time": time.time() - start_time
-                            }
-                    else:
-                        # No relevant self-info knowledge found
-                        logger.info("No relevant self-info knowledge found, using direct LLM")
-                        response = await self._direct_llm_response(user_text)
-                        return {
-                            "response_text": response,
-                            "cached": False,
-                            "source": "llm_direct",
-                            "knowledge_used": False,
-                            "processing_time": time.time() - start_time
-                        }
-                        
-                except Exception as knowledge_error:
-                    logger.error(f"Self-info knowledge search failed: {str(knowledge_error)}")
-                    # Fall back to direct LLM
-                    response = await self._direct_llm_response(user_text)
+
+                    # Expand short/ambiguous queries into full questions for
+                    # better embedding-based retrieval.  The RAG prompt still
+                    # receives the *original* user_text, but the retriever
+                    # sees the expanded version so it pulls richer context.
+                    retrieval_query = self._expand_query(user_text)
+
+                    rag_response = self.rag_chain.invoke({"query": retrieval_query})
+                    response_text = rag_response["result"]
+                    source_docs = rag_response.get("source_documents", [])
+
+                    return {
+                        "response_text": response_text,
+                        "cached": False,
+                        "source": "rag_self_info",
+                        "knowledge_used": True,
+                        "source_documents": len(source_docs),
+                        "processing_time": time.time() - start_time
+                    }
+                except Exception as rag_error:
+                    logger.error(f"RAG chain failed, using fallback LLM: {str(rag_error)}")
+                    response = await self._direct_llm_response(user_text, use_fallback=True)
                     return {
                         "response_text": response,
                         "cached": False,
                         "source": "llm_fallback",
                         "knowledge_used": False,
-                        "knowledge_error": str(knowledge_error),
+                        "rag_error": str(rag_error),
                         "processing_time": time.time() - start_time
                     }
             else:

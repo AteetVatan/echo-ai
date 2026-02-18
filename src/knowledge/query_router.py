@@ -60,6 +60,9 @@ _EVIDENCE_PATTERNS: list[re.Pattern] = [
         r"\b(explain.*project|describe.*project|project.*details?)\b",
         r"\b(cv|resume|curriculum)\b",
         r"\b(experience at|worked at|work.*at|employment)\b",
+        r"\bwork.{0,3}exp",            # catches "work experience", "work experiance", typos
+        r"\b(career|jobs?|employer|companies?)\b",
+        r"\b(pitney bowes|12iq)\b",
         r"\b(ihs markit|markit)\b",
         r"\bapplybots\b",
         r"\bgalileo\b",
