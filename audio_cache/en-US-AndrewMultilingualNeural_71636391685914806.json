@@ -1,0 +1,6 @@
+{
+    "text": "I use pytest with pytest-asyncio and pytest-cov for testing, factory-boy and faker for test data generation. For code quality, I rely on Ruff or Black for formatting, flake8 for linting, MyPy for strict type checking, and pre-commit hooks to enforce quality in the Git workflow.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_71636391685914806.mp3",
+    "created_at": "2026-02-18T14:19:24.390672"
+}

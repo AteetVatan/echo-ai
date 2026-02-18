@@ -1,0 +1,6 @@
+{
+    "text": "I use a mix of prompt engineering techniques depending on the task: zero-shot, few-shot, chain-of-thought, function calling, structured output generation, and TOML serialization for token-efficient LLM I/O.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_3556756322865382443.mp3",
+    "created_at": "2026-02-18T14:17:28.804986"
+}

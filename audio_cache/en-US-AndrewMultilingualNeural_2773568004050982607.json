@@ -1,0 +1,6 @@
+{
+    "text": "The MASX-Forecasting system uses 23 doctrine-based agents that act as specialized strategic thinkers. Each agent is powered by its own LlamaIndex RAG pipeline over a unique strategic doctrine corpus. The agents include:\nSun Tzu The Art of War\nChanakya Arthashastra\nClausewitz On War\nMachiavelli The Prince\nKissinger Diplomacy & Realpolitik\nThucydides History of the Peloponnesian War\nKautilya Statecraft\nBismarck Realpolitik & Balance of Power\n\n...and others.\n\nEach agent applies its specific strategic framework to analyze geopolitical events, generating probabilistic forecasts through multi-perspective reasoning. A master LLM then synthesizes all agent analyses into final, doctrine-grounded forecasts.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_2773568004050982607.mp3",
+    "created_at": "2026-02-18T14:13:54.050248"
+}

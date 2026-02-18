@@ -1,0 +1,6 @@
+{
+    "text": "MASX-Forecasting is my autonomous strategic forecasting system. It's a multi-agent AI engine that uses a \"Council of Doctrines\"\u201423 specialized agents modeled after strategic thinkers like Sun Tzu, Chanakya, Clausewitz, Machiavelli, and Kissinger\u2014to analyze geopolitical events through probabilistic forecasting.\n\nThe system integrates real-time data from GDELT Global Database of Events, Language, and Tone and processes it through a hexagonal architecture pattern. It supports multiple LLM providers OpenAI, Mistral, Together AI and is built with Python 3.12+, LlamaIndex, LangGraph, FastAPI, Supabase, PostgreSQL, and Redis.\n\nIn essence, it converts live news into structured, doctrine-grounded strategic forecasts, enabling 24/7 insight generation with research-grade accuracy. You can check out the repository here: https://github.com/AteetVatan/masx-forecasting",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_4314497601252221047.mp3",
+    "created_at": "2026-02-18T14:11:23.840010"
+}

@@ -1,0 +1,6 @@
+{
+    "text": "ShotGraph is my AI cinematic video generation pipeline. It's a modular, multi-agent system I built to convert long-form text stories into cinematic video sequences with visual continuity.\n\nThe core idea is to take a narrative script and break it down into scenes and shots using LLMs, then generate the corresponding video, narration, and background music using open-source diffusion and audio models. It features cost-optimized LLM routing across multiple providers, tracks visual elements like characters and scenes for consistency, and supports both CPU for debugging and GPU for production execution profiles.\n\nTechnically, it's built with Python and FastAPI, uses LlamaIndex for orchestration, integrates diffusion models for image generation, and employs structured prompt engineering throughout. You can check out the code and documentation on GitHub: https://github.com/AteetVatan/ShotGraph",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_6772666701467080193.mp3",
+    "created_at": "2026-02-18T14:12:24.379714"
+}

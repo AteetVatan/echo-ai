@@ -1,0 +1,6 @@
+{
+    "text": "AgenticMatch is a multi-agent AI system I designed for intelligent job matching and automated application workflows. It uses specialized agents\u2014like a Profile Analyzer, Job Matcher, and Application Agent\u2014to parse job descriptions, match them against candidate profiles, and automate the application process. The system is built with LangChain, AutoGen, and FastAPI, and it\u2019s engineered for scalability, testability, and real-world deployment. It\u2019s part of my broader focus on building production-ready, agentic AI infrastructure.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_4021692944647232640.mp3",
+    "created_at": "2026-02-18T14:10:55.037370"
+}

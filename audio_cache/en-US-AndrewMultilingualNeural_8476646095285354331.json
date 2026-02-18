@@ -1,0 +1,6 @@
+{
+    "text": "I primarily work with Python's asyncio ecosystem for async programming. My go-to tools include:\n\nAsync I/O & Networking:\nhttpx with HTTP/2 support for async HTTP requests\naiohttp for web scraping and server-client async communication\nasyncpg for high-performance async PostgreSQL operations\n\nParallelism & Scheduling:\nThreadPoolExecutor and ProcessPoolExecutor from Python's concurrent.futures for CPU-bound or blocking I/O tasks\nAPScheduler for advanced task scheduling and cron-like job management\nDomain-level circuit breakers custom implementations for fault-tolerant distributed calls\n\nAsync Utilities:\nnestasyncio to run event loops inside existing event loops when needed\nasyncio-throttle for rate limiting async operations\naiohappyeyeballs for robust happy-eyeballs algorithm in network connections\n\nIn practice, I combine these with structured patterns like fan-out/fan-in for concurrent data processing, state management across distributed agents, and error isolation to keep failures from cascading.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_8476646095285354331.mp3",
+    "created_at": "2026-02-18T14:20:51.433480"
+}

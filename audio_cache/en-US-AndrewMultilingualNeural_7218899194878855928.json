@@ -1,0 +1,6 @@
+{
+    "text": "The Galileo project is an AI LLM evaluation platform I built called Galileo Arena. It implements the Galileo Test principle\u2014using structured adversarial debate between multiple LLMs to assess truthfulness, evidence-grounding, and reasoning under pressure. Instead of just Q&A benchmarks, models compete in multi\u2011agent debates where they defend claims with evidence, and a judge scores them on accuracy, evidence quality, and reasoning strength.\n\nThe platform supports configurable LLM providers OpenAI, Anthropic, Google, Mistral, local models, dataset\u2011driven testing, and comprehensive scoring metrics. Tech stack is Python, FastAPI, and LangChain. You can check out the repo here: https://github.com/AteetVatan/Galileo \u2014 and there\u2019s also a live demo at https://galileo.masxai.com/.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_7218899194878855928.mp3",
+    "created_at": "2026-02-18T14:12:00.852119"
+}

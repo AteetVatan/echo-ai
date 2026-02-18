@@ -1,0 +1,6 @@
+{
+    "text": "I ensure code quality through a multi-layered approach that combines automation, process discipline, and team collaboration.\n\nMy core practices are:\nStatic Analysis & Formatting: I enforce strict type checking with MyPy, linting with Flake8, and consistent formatting with Black and isort. This is automated via pre-commit hooks to catch issues before code is even committed.\nComprehensive Testing: I maintain high test coverage targeting 90% using pytest and pytest-asyncio, supported by tools like factory-boy and faker for reliable test data.\nCode Review Discipline: Every change undergoes review focused on clarity, correctness, security, and long-term maintainability\u2014not just cleverness.\nCI/CD Integration: All checks linting, typing, tests run automatically in the pipeline. Nothing gets deployed without passing.\nSmall, Focused Commits: I advocate for small, atomic commits with clear conventional messages to make changes easier to review and revert if needed.\n\nEven under tight deadlines, I protect quality by scoping deliverables carefully, never skipping tests, and increasing review frequency rather than lowering standards.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_7794995277022534828.mp3",
+    "created_at": "2026-02-18T14:26:57.788357"
+}

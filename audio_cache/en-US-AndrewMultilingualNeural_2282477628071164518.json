@@ -1,0 +1,6 @@
+{
+    "text": "I work with a range of modern AI and LLM frameworks to build production-ready systems. My go-to stack includes:\nLangChain and LangGraph for building and orchestrating multi-step LLM workflows and agentic systems.\nAutoGen and CrewAI for designing collaborative multi-agent architectures.\nLlamaIndex for advanced retrieval-augmented generation RAG and data indexing.\nHugging Face Transformers and sentence-transformers for working with open-source models and embeddings.\nPydantic AI for structured, type-safe LLM interactions.\nModel Context Protocol MCP for tool and context integration.\n\nFor vector retrieval, I typically use ChromaDB, FAISS, or Pinecone, depending on the scale and latency requirements. On the provider side, I integrate with OpenAI, Mistral, and Gemini APIs, and I implement cost-optimized routing to switch between models based on the task.\n\nThis stack allows me to build everything from real-time LLM pipelines and autonomous agents to scalable RAG systems and ethical simulation frameworks.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_2282477628071164518.mp3",
+    "created_at": "2026-02-18T14:17:00.772757"
+}

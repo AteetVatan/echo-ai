@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     MISTRAL_API_BASE: str = Field("https://api.mistral.ai", env="MISTRAL_API_BASE")
     
     # Edge-TTS Configuration
-    EDGE_TTS_VOICE: str = Field("en-IN-PrabhatNeural", env="EDGE_TTS_VOICE")
+    EDGE_TTS_VOICE: str = Field("en-US-AndrewMultilingualNeural", env="EDGE_TTS_VOICE")
     
     # Latency Configuration
     STT_CHUNK_DURATION: float = Field(2.0, env="STT_CHUNK_DURATION")

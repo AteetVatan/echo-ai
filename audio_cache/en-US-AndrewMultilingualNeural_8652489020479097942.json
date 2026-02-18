@@ -1,0 +1,6 @@
+{
+    "text": "I use a range of architectural patterns depending on the project\u2019s complexity and domain. Here\u2019s a quick overview:\nHexagonal/Clean Architecture \u2013 for core business logic isolation, used in projects like MASX\u2011Forecasting.\nMulti\u2011agent orchestration with LangGraph \u2013 fan\u2011out/fan\u2011in flows in MASX\u2011Hotspots.\nTiered pipeline processing \u2013 for geospatial data workflows in MASX\u2011GeoSignal.\nAgno\u2011based agent orchestration \u2013 in MedAI.\nRAG with dual\u2011index knowledge bases \u2013 implemented in EchoAI.\nTruth\u2011Lock anti\u2011hallucination pattern \u2013 a core design in ApplyBots.\nAdversarial evaluation \u2013 used with Galileo.\nSingleton pattern \u2013 for resource\u2011heavy components.\nModular service\u2011oriented architecture \u2013 across most backend systems.\nEvent\u2011driven state machines \u2013 for workflow and agent coordination.\n\nI also rely on visual aids\u2014architecture diagrams and flowcharts\u2014to communicate design decisions, and I document everything with docstrings, modular READMEs, and linked diagrams in repos.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_8652489020479097942.mp3",
+    "created_at": "2026-02-18T14:21:18.419574"
+}

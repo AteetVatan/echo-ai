@@ -1,0 +1,6 @@
+{
+    "text": "Yes \u2014 early in my career, I underestimated API rate limits while building a data pipeline. The system kept hitting throttling errors in production, causing delays and incomplete data pulls. I learned to model throughput upfront, add caching layers, and design for graceful degradation. Now I treat rate limits and failure modes as first-class design constraints.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_1247518644655674024.mp3",
+    "created_at": "2026-02-18T14:32:07.908214"
+}

@@ -1,0 +1,6 @@
+{
+    "text": "ApplyBots is my AI-powered job application automation platform. It's an agentic system built with AutoGen that uses specialized agents \u2014 like a CV Agent, Cover Letter Agent, and Job Matcher Agent \u2014 to generate tailored application materials. A key feature is the Truth-Lock Technology, which ensures all AI-generated content strictly adheres to verified source data from your actual CV, preventing any hallucination. It uses RAG with ChromaDB for context retrieval and can output materials in multiple formats. You can check out the code and details on GitHub: https://github.com/AteetVatan/ApplyBots.",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_8152366209165639589.mp3",
+    "created_at": "2026-02-18T14:11:39.358644"
+}

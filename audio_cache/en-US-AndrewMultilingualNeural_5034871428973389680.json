@@ -1,0 +1,6 @@
+{
+    "text": "MedAI is a clinical speech and documentation platform I built for physiotherapy clinics operating in German-speaking environments. It\u2019s a real-time backend system that handles clinical intake from speech to structured documentation.\n\nThe core workflow is: a therapist speaks into the system in German or other supported languages, MedAI transcribes it in real-time, extracts medical entities with ICD-10 coding, summarizes the case using an LLM, translates if needed, and finally generates a PDF clinical report\u2014all orchestrated by an Agno-based Clinical Intake Agent.\n\nTechnically, it\u2019s a modular FastAPI service with WebSockets for streaming. It uses Faster-Whisper locally for speech-to-text with a Together AI cloud fallback, a Mixtral 8x7B LLM via Mistral\u2019s API for summarization, an external NER microservice for medical coding, and Supabase for storage. The frontend is vanilla HTML/CSS/JS for simplicity and speed.\n\nYou can check out the full code and setup here: https://github.com/AteetVatan/medai",
+    "voice_id": "en-US-AndrewMultilingualNeural",
+    "file_path": "audio_cache\\en-US-AndrewMultilingualNeural_5034871428973389680.mp3",
+    "created_at": "2026-02-18T14:12:57.660099"
+}

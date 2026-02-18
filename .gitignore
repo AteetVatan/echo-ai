@@ -128,10 +128,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Audio cache files
-audio_cache/*.mp3
-audio_cache/*.json
-audio_cache/*.wav
+# Audio cache files — pre-built cache is committed for zero cold-start latency
+# audio_cache/*.mp3
+# audio_cache/*.json
+# audio_cache/*.wav
 
 # IDE files
 .vscode/
@@ -154,6 +154,5 @@ out/
 node_modules/
 
 # ChromaDB / vector database binary files
-*.bin
-src/db/chroma_db/
+# Note: src/db/chroma_db/ (reply cache) is committed for pre-built cache
 src/db/self_info_knowledge/
