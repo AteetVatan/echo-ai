@@ -25,6 +25,9 @@ const MIN_SPEECH_MS = 500;
 const MAX_SEND_RETRIES = 30; // 3 seconds max wait for WS open
 const PING_INTERVAL_MS = 25_000; // FIX R7: keepalive every 25s
 const ERROR_DISMISS_MS = 6000; // FIX R10: auto-dismiss errors
+const MAX_RECONNECT_ATTEMPTS = 5; // give up after 5 background retries
+const RECONNECT_BASE_MS = 2_000; // initial backoff delay
+const RECONNECT_MAX_MS = 30_000; // cap backoff at 30s
 
 // Minimal silent MP3 (< 200 bytes) used to "unlock" the HTMLAudioElement on iOS.
 // iOS Safari blocks audio.play() unless it originates from a user gesture.
@@ -83,6 +86,7 @@ export function useChat() {
     const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // FIX R7
     const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // FIX R10
     const blobUrlsRef = useRef<string[]>([]); // FIX R4: track blob URLs for cleanup
+    const reconnectAttemptsRef = useRef(0); // exponential backoff counter
 
     // FIX R1/R3 callback refs (break stale closure chains)
     const playAudioRef = useRef<(url: string) => void>(() => { });
@@ -108,7 +112,12 @@ export function useChat() {
 
     /* ── WebSocket ────────────────────────────────────────────────── */
 
-    const connectWs = useCallback(() => {
+    /**
+     * Connect the WebSocket.
+     * @param silent  If true, suppress user-facing error toasts (used for
+     *                background auto-reconnects so the UI stays clean).
+     */
+    const connectWs = useCallback((silent = false) => {
         // FIX R8: prevent double connections
         if (isConnectingRef.current) return;
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -122,6 +131,7 @@ export function useChat() {
 
         ws.onopen = () => {
             isConnectingRef.current = false;
+            reconnectAttemptsRef.current = 0; // reset backoff on success
             setError(null);
 
             // Send auth message FIRST (before heartbeat or anything else)
@@ -163,17 +173,29 @@ export function useChat() {
                 pingIntervalRef.current = null;
             }
 
-            // Auto-reconnect after 2s if still in talk mode
-            // FIX V1: Track timer so it can be cancelled on unmount
-            reconnectTimerRef.current = setTimeout(() => {
-                reconnectTimerRef.current = null;
-                if (isTalkModeRef.current) connectWs();
-            }, 2000);
+            // Exponential backoff: 2s → 4s → 8s → … capped at 30s
+            const attempt = reconnectAttemptsRef.current;
+            if (attempt < MAX_RECONNECT_ATTEMPTS) {
+                const delay = Math.min(
+                    RECONNECT_BASE_MS * Math.pow(2, attempt),
+                    RECONNECT_MAX_MS,
+                );
+                reconnectAttemptsRef.current = attempt + 1;
+                reconnectTimerRef.current = setTimeout(() => {
+                    reconnectTimerRef.current = null;
+                    connectWs(true); // silent background reconnect
+                }, delay);
+            }
+            // After MAX_RECONNECT_ATTEMPTS we stop — the next user action
+            // (send / startTalkMode) will trigger a fresh connect.
         };
 
         ws.onerror = () => {
             isConnectingRef.current = false;
-            setErrorWithDismiss("WebSocket connection failed");
+            // Only show error toast for user-initiated connects
+            if (!silent) {
+                setErrorWithDismiss("WebSocket connection failed");
+            }
             ws.close();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- uses refs to avoid stale closures
@@ -292,6 +314,11 @@ export function useChat() {
     const playAudio = useCallback((audioUrl: string) => {
         const audio = audioPlayerRef.current;
         if (!audio) return;
+
+        // Stop any current playback first (prevents overlapping audio on
+        // rapid Replay clicks)
+        audio.pause();
+        audio.currentTime = 0;
 
         setVoiceState("speaking");
 
@@ -501,7 +528,8 @@ export function useChat() {
 
             // Connect WS if not already
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-                connectWs();
+                reconnectAttemptsRef.current = 0; // user-initiated → fresh backoff
+                connectWs(); // not silent — show error if it fails
             }
 
             // Timer — pauses during processing/speaking
@@ -603,7 +631,8 @@ export function useChat() {
             if (!trimmed) return;
 
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-                connectWs();
+                reconnectAttemptsRef.current = 0; // user-initiated → fresh backoff
+                connectWs(); // not silent — show error if it fails
                 let attempts = 0;
                 const checkAndSend = () => {
                     if (wsRef.current?.readyState === WebSocket.OPEN) {
