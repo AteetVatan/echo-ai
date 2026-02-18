@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# Do NOT use `set -e` — we manage errors explicitly so Railway sees logs.
 
 echo "═══════════════════════════════════════════════════"
 echo " EchoAI — Starting Combined Service"
@@ -13,7 +13,27 @@ echo "  PORT=$PORT"
 echo "  Configuring nginx on port $PORT..."
 envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-# ── 2. Start FastAPI backend (background) ─────────────────────────
+# Validate nginx config before starting anything
+echo "  Testing nginx config..."
+nginx -t 2>&1 || { echo "ERROR: nginx config test failed!"; }
+
+# ── 2. Start nginx FIRST (foreground-ready, but backgrounded) ─────
+# Nginx starts almost instantly and will serve /health directly,
+# allowing Railway's healthcheck to pass while backend warms up.
+echo "  Starting nginx reverse proxy on :$PORT..."
+nginx -g "daemon off;" &
+NGINX_PID=$!
+sleep 1
+
+# Verify nginx is alive
+if ! kill -0 $NGINX_PID 2>/dev/null; then
+    echo "ERROR: nginx failed to start! Check /var/log/nginx/error.log:"
+    cat /var/log/nginx/error.log 2>/dev/null || echo "  (no error log found)"
+    exit 1
+fi
+echo "  nginx is running (PID $NGINX_PID) ✓"
+
+# ── 3. Start FastAPI backend (background) ─────────────────────────
 echo "  Starting FastAPI backend on :8000..."
 cd /app
 python -m uvicorn src.api.main:app \
@@ -23,24 +43,26 @@ python -m uvicorn src.api.main:app \
     --no-access-log &
 BACKEND_PID=$!
 
-# ── 3. Start Next.js frontend (background) ───────────────────────
+# ── 4. Start Next.js frontend (background) ───────────────────────
 echo "  Starting Next.js frontend on :3000..."
 cd /app/frontend_standalone
 PORT=3000 HOSTNAME=0.0.0.0 node server.js &
 FRONTEND_PID=$!
 
-# ── 4. Wait briefly, then start nginx (foreground) ───────────────
-sleep 2
-echo "  Starting nginx reverse proxy on :$PORT..."
 echo "═══════════════════════════════════════════════════"
-echo " EchoAI is ready!"
+echo " EchoAI is ready!  (backend warming up in background)"
 echo "═══════════════════════════════════════════════════"
-nginx -g "daemon off;" &
-NGINX_PID=$!
 
 # ── 5. Wait for any process to exit ──────────────────────────────
 # If any process dies, bring down the whole container so Railway restarts it
 wait -n $BACKEND_PID $FRONTEND_PID $NGINX_PID
-echo "A process exited. Shutting down..."
+EXIT_CODE=$?
+echo "A process exited (code $EXIT_CODE). Shutting down..."
+
+# Log which process died
+kill -0 $NGINX_PID   2>/dev/null || echo "  nginx exited"
+kill -0 $BACKEND_PID 2>/dev/null || echo "  backend exited"
+kill -0 $FRONTEND_PID 2>/dev/null || echo "  frontend exited"
+
 kill $BACKEND_PID $FRONTEND_PID $NGINX_PID 2>/dev/null || true
 exit 1
