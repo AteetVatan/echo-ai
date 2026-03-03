@@ -59,8 +59,35 @@ cd /app/frontend_standalone
 PORT=3000 HOSTNAME=0.0.0.0 node server.js &
 FRONTEND_PID=$!
 
+# ── 5. Wait for backend + frontend to be ready ──────────────
+echo "  Waiting for services to become ready..."
+MAX_WAIT=120
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    BACKEND_OK=0
+    FRONTEND_OK=0
+
+    curl -sf http://127.0.0.1:$BACKEND_PORT/health > /dev/null 2>&1 && BACKEND_OK=1
+    curl -sf http://127.0.0.1:3000 > /dev/null 2>&1 && FRONTEND_OK=1
+
+    if [ $BACKEND_OK -eq 1 ] && [ $FRONTEND_OK -eq 1 ]; then
+        echo "  Both services are ready! (waited ${WAITED}s)"
+        break
+    fi
+
+    sleep 2
+    WAITED=$((WAITED + 2))
+    [ $((WAITED % 10)) -eq 0 ] && echo "  Still waiting... (${WAITED}s) backend=$BACKEND_OK frontend=$FRONTEND_OK"
+done
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "  WARNING: Services did not become ready within ${MAX_WAIT}s"
+    echo "    Backend reachable: $BACKEND_OK"
+    echo "    Frontend reachable: $FRONTEND_OK"
+fi
+
 echo "═══════════════════════════════════════════════════"
-echo " EchoAI is ready!  (backend warming up in background)"
+echo " EchoAI is ready!"
 echo "═══════════════════════════════════════════════════"
 
 # ── 5. Wait for any process to exit ──────────────────────────────

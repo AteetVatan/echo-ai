@@ -79,16 +79,7 @@ Click **"+ New Variable"** or use **"RAW Editor"** to paste multiple at once.
 | `SUPABASE_DB_URL` | *(empty)* | Using Supabase cloud DB |
 | `SUPABASE_SERVICE_ROLE_KEY` | *(empty)* | Using Supabase cloud DB |
 
-### 🔨 Build Variable (from `frontend/.env.local`)
-
-This one is special — it must be available at **build time**:
-
-1. In the Variables tab, click **"+ New Variable"**
-2. Set the name to: `NEXT_PUBLIC_ECHOAI_API_KEY`
-3. Set the value to: the **same value** as `ECHOAI_API_KEY`
-4. **Important:** Enable the toggle **"Available at build time"** (or add it under the "Build" section)
-
-> 💡 **Why?** Next.js inlines `NEXT_PUBLIC_*` variables into the JavaScript bundle during `npm run build`. If you only set it as a runtime variable, the frontend won't see it.
+> 💡 **Note:** `ECHOAI_API_KEY` is used by both the FastAPI backend and the Next.js API route proxies (server-side). It does **not** need to be a build-time variable — it's a standard runtime env var.
 
 ---
 
@@ -184,10 +175,7 @@ SUPABASE_DB_PASSWORD=
 SUPABASE_DB_URL=
 ```
 
-And as a **Build Variable**:
-```
-NEXT_PUBLIC_ECHOAI_API_KEY=your-auth-key
-```
+> `ECHOAI_API_KEY` is used at runtime by both backend and frontend API routes. No build-time variable needed.
 
 ---
 
@@ -197,7 +185,7 @@ NEXT_PUBLIC_ECHOAI_API_KEY=your-auth-key
 |---------|----------|
 | Build fails with OOM | Railway Pro plan needed (8GB RAM). Check build logs for "Killed" errors. |
 | App crashes on startup | Check **Variables** — all 3 API keys must be set. Check logs for `ValidationError`. |
-| Frontend loads but chat doesn't work | Check `ALLOWED_ORIGINS` includes your Railway URL. Check `ECHOAI_API_KEY` matches `NEXT_PUBLIC_ECHOAI_API_KEY`. |
+| Frontend loads but chat doesn't work | Check `ALLOWED_ORIGINS` includes your Railway URL. Verify `ECHOAI_API_KEY` is set as a runtime env var. |
 | WebSocket connection fails | Railway supports WebSocket natively. Check browser console for WS errors. Ensure nginx is routing `/ws/` correctly. |
 | Slow first response after deploy | Normal — vector index rebuilds on cold start (~30-60s). Subsequent requests are fast. |
 | "Rate limit exceeded" | Default is 30 req/min. Adjust `RATE_LIMIT_PER_MINUTE` in variables if needed. |

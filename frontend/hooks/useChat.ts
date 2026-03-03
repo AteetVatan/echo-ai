@@ -82,6 +82,7 @@ export function useChat() {
     const voiceStateRef = useRef<VoiceState>("chatMode");
     const isTalkModeRef = useRef(false);
     const isConnectingRef = useRef(false); // FIX R8: prevent double connect
+    const isAuthenticatedRef = useRef(false); // gate sends until HMAC auth completes
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // FIX V1
     const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // FIX R7
     const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // FIX R10
@@ -134,15 +135,30 @@ export function useChat() {
             reconnectAttemptsRef.current = 0; // reset backoff on success
             setError(null);
 
-            // Send auth message FIRST (before heartbeat or anything else)
-            const apiKey = process.env.NEXT_PUBLIC_ECHOAI_API_KEY;
-            if (apiKey) {
-                ws.send(JSON.stringify({ type: "auth", api_key: apiKey }));
-                // isConnected will be set when auth_success is received
-            } else {
-                // No auth configured — mark as connected immediately
-                setIsConnected(true);
-            }
+            // Fetch HMAC session token and authenticate — all inside onopen
+            // so there's no race between WS readyState and token availability.
+            // The raw ECHOAI_API_KEY never leaves the server.
+            (async () => {
+                try {
+                    const tokenRes = await fetch("/api/auth/ws-token");
+                    if (tokenRes.ok) {
+                        const { token } = await tokenRes.json();
+                        if (token && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: "auth", token }));
+                            // isConnected set when auth_success is received
+                            return;
+                        }
+                    }
+                } catch {
+                    // Token fetch failed — fall through
+                }
+                // No auth configured or token fetch failed.
+                // Guard: only set if onclose hasn't already reset us.
+                if (ws.readyState === WebSocket.OPEN) {
+                    isAuthenticatedRef.current = true;
+                    setIsConnected(true);
+                }
+            })();
 
             // FIX R7: Start heartbeat
             if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
@@ -164,6 +180,7 @@ export function useChat() {
 
         ws.onclose = () => {
             isConnectingRef.current = false;
+            isAuthenticatedRef.current = false;
             setIsConnected(false);
             wsRef.current = null;
 
@@ -202,9 +219,12 @@ export function useChat() {
     }, []);
 
     const sendWs = useCallback((data: Record<string, unknown>) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(data));
-        }
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+        // Allow ping and auth messages before auth completes;
+        // all other messages require auth.
+        const msgType = data.type as string;
+        if (msgType !== "ping" && msgType !== "auth" && !isAuthenticatedRef.current) return;
+        wsRef.current.send(JSON.stringify(data));
     }, []);
 
     /* ── WS message handler ──────────────────────────────────────── */
@@ -212,7 +232,8 @@ export function useChat() {
     const handleWsMessage = useCallback((msg: WSIncomingMessage) => {
         switch (msg.type) {
             case "auth_success":
-                // Auth succeeded — now mark as connected
+                // Auth succeeded — now mark as connected and allow sends
+                isAuthenticatedRef.current = true;
                 setIsConnected(true);
                 break;
 
@@ -630,12 +651,15 @@ export function useChat() {
             const trimmed = text.trim();
             if (!trimmed) return;
 
-            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-                reconnectAttemptsRef.current = 0; // user-initiated → fresh backoff
-                connectWs(); // not silent — show error if it fails
+            if (!isAuthenticatedRef.current) {
+                // Not authenticated yet — connect and wait for auth to complete
+                if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+                    reconnectAttemptsRef.current = 0; // user-initiated → fresh backoff
+                    connectWs(); // not silent — show error if it fails
+                }
                 let attempts = 0;
                 const checkAndSend = () => {
-                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    if (isAuthenticatedRef.current) {
                         doSendRef.current(trimmed); // FIX R1: use ref
                     } else if (attempts < MAX_SEND_RETRIES) {
                         attempts++;

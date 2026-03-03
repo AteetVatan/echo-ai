@@ -9,6 +9,9 @@ import asyncio
 import json
 import uuid
 import base64
+import hmac
+import hashlib
+import time
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
@@ -297,6 +300,35 @@ async def clear_conversation():
         raise HTTPException(status_code=500, detail="Failed to clear conversation")
 
 
+# ---------------------------------------------------------------------------
+# HMAC session-token verification for WebSocket auth
+# ---------------------------------------------------------------------------
+WS_TOKEN_MAX_AGE_SECONDS = 300  # 5-minute expiry
+
+
+def _verify_ws_token(token: str, secret: str) -> bool:
+    """Verify an HMAC-signed session token.
+
+    Token format: "<unix_timestamp>.<hmac_sha256_hex>"
+    The Next.js API route at /api/auth/ws-token generates these.
+    """
+    parts = token.split(".", 1)
+    if len(parts) != 2:
+        return False
+    timestamp_str, received_hmac = parts
+    try:
+        timestamp = int(timestamp_str)
+    except (ValueError, TypeError):
+        return False
+    # Reject tokens older than 5 minutes
+    if abs(time.time() - timestamp) > WS_TOKEN_MAX_AGE_SECONDS:
+        return False
+    expected = hmac.new(
+        secret.encode(), timestamp_str.encode(), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, received_hmac)
+
+
 @app.websocket("/ws/voice")
 async def websocket_voice_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time voice chat with streaming support."""
@@ -315,18 +347,22 @@ async def websocket_voice_endpoint(websocket: WebSocket):
     try:
         await manager.connect(websocket, session_id, ip=client_ip)
         
-        # ── First-message authentication ──────────────────────────
+        # ── First-message authentication (HMAC session tokens) ─────
+        # The frontend fetches a signed token from /api/auth/ws-token
+        # (a Next.js API route). The raw ECHOAI_API_KEY never leaves
+        # the server. We verify the HMAC signature + timestamp here.
         if settings.ECHOAI_API_KEY:
             try:
                 auth_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
                 auth_msg = json.loads(auth_raw)
+                token = auth_msg.get("token", "")
                 if (
                     auth_msg.get("type") != "auth"
-                    or auth_msg.get("api_key") != settings.ECHOAI_API_KEY
+                    or not _verify_ws_token(token, settings.ECHOAI_API_KEY)
                 ):
                     await websocket.send_text(json.dumps({
                         "type": "auth_failed",
-                        "message": "Invalid API key",
+                        "message": "Invalid or expired token",
                     }))
                     await websocket.close(code=1008, reason="Authentication failed")
                     manager.disconnect(session_id)

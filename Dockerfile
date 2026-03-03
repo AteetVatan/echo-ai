@@ -12,9 +12,8 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ .
 
-# Build arg — Next.js inlines NEXT_PUBLIC_* at build time
-ARG NEXT_PUBLIC_ECHOAI_API_KEY=""
-ENV NEXT_PUBLIC_ECHOAI_API_KEY=$NEXT_PUBLIC_ECHOAI_API_KEY
+# ECHOAI_API_KEY is a runtime env var — used by Next.js API route proxies
+# (no longer inlined into client JS via NEXT_PUBLIC_*)
 
 # Build the standalone Next.js app
 RUN npm run build

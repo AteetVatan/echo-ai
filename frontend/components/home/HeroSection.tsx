@@ -29,7 +29,7 @@ export function HeroSection() {
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-green)] opacity-75" />
                             <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-green)]" />
                         </span>
-                        <span className="text-[var(--color-text-muted)]">RAG-Powered AI Clone — Online</span>
+                        <span className="text-[var(--color-text-muted)]">RAG Powered Ateet AI Clone</span>
                     </div>
 
                     <h1 className="mb-4 text-3xl font-bold leading-[1.1] tracking-tight sm:mb-6 sm:text-5xl lg:text-7xl">
