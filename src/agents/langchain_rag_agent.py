@@ -40,6 +40,15 @@ from src.db.db_operations import DBOperations
 logger = get_logger(__name__)
 settings = get_settings()
 
+# Language code → full name map for LLM prompts
+LANGUAGE_NAMES = {
+    "en": "English", "de": "German", "fr": "French",
+    "es": "Spanish", "it": "Italian", "nl": "Dutch",
+    "pt": "Portuguese", "hi": "Hindi", "tr": "Turkish",
+    "pl": "Polish", "ru": "Russian", "ja": "Japanese",
+    "ko": "Korean", "zh": "Chinese", "ar": "Arabic",
+}
+
 @dataclass
 class ReplyCache:
     """Cache entry for semantic reply matching."""
@@ -253,11 +262,18 @@ Special instruction:
 - ONLY say "I don't have specific information about that in my knowledge base." if the CONTEXT contains ABSOLUTELY NOTHING related to the user's intent. If ANYTHING in the CONTEXT is relevant, use it to form an answer.
 
 Rules:
-- Always respond in English, regardless of the language of the question.
+- Respond in the language specified by REPLY_LANGUAGE below.
+  The CONTEXT is in English — if REPLY_LANGUAGE is not English, translate your answer
+  while preserving ALL proper nouns exactly as-is. Never translate project names
+  (EchoAI, AgenticMatch, MASX, Nexora, ApplyBots, MedAI), company names (IHS Markit),
+  technology names (LangChain, ChromaDB, FastAPI, Docker, Python, React), or
+  certification names.
 - Never fabricate or assume details outside the CONTEXT.
 - Keep answers relevant — avoid generic or boilerplate introductions unless they directly add value.
 - Always sound like Ateet, not a generic AI assistant.
 - NEVER say "I'm an AI assistant" or "I'm DeepSeek" or similar. You ARE Ateet's digital twin.
+
+REPLY_LANGUAGE: {reply_language}
 
 ---
 CONVERSATION HISTORY (use for context on follow-up questions):
@@ -349,17 +365,20 @@ CONTEXT:
     # Regex rules + LLM fallback live in src.agents.query_expansions
     # -----------------------------------------------------------------------
 
-    async def process_query(self, user_text: str, session_id: str = None) -> Dict[str, Any]:
+    async def process_query(self, user_text: str, session_id: str = None,
+                            language: str = "en") -> Dict[str, Any]:
         """
         Process user query through LangChain RAG pipeline with conversation context.
         
         Args:
             user_text: User input text
             session_id: Session identifier for conversation history
+            language: Detected language code (e.g. "en", "de", "fr")
             
         Returns:
             Dict with response and metadata
         """
+        reply_language = LANGUAGE_NAMES.get(language, "English")
         try:
             start_time = time.time()
             is_contextual = self._is_contextual_query(user_text, session_id)
@@ -396,7 +415,7 @@ CONTEXT:
                         else:
                             raise
 
-                    # Context-aware query expansion:
+                    # Context-aware query expansion (includes translation for non-English):
                     # For follow-ups, prepend last exchange so LLM can resolve anaphora.
                     from src.agents.query_expansions import expand_query
                     expand_input = user_text
@@ -409,7 +428,7 @@ CONTEXT:
                             f"| Current: {user_text}"
                         )
                     retrieval_query = await expand_query(
-                        expand_input, llm=self.primary_llm
+                        expand_input, llm=self.primary_llm, language=language
                     )
 
                     # Manual retrieval + prompt (replacing RetrievalQA chain)
@@ -421,6 +440,7 @@ CONTEXT:
                     messages = self.rag_prompt.format_messages(
                         context=context_str,
                         chat_history=history_str,
+                        reply_language=reply_language,
                         question=user_text  # ORIGINAL query, not expanded
                     )
                     llm_response = self.primary_llm.invoke(messages)
@@ -449,7 +469,8 @@ CONTEXT:
                 except Exception as rag_error:
                     logger.error(f"RAG pipeline failed, using fallback LLM: {str(rag_error)}")
                     response = await self._direct_llm_response(
-                        user_text, session_id=session_id, use_fallback=True
+                        user_text, session_id=session_id, use_fallback=True,
+                        language=language
                     )
                     await self._store_exchange(session_id, user_text, response)
                     return {
@@ -464,7 +485,7 @@ CONTEXT:
                 # Self-info knowledge base not available, use direct LLM
                 logger.warning("Self-info knowledge base not available, using direct LLM")
                 response = await self._direct_llm_response(
-                    user_text, session_id=session_id
+                    user_text, session_id=session_id, language=language
                 )
                 await self._store_exchange(session_id, user_text, response)
                 return {
@@ -480,7 +501,8 @@ CONTEXT:
             # Final fallback to direct LLM
             try:
                 response = await self._direct_llm_response(
-                    user_text, session_id=session_id, use_fallback=True
+                    user_text, session_id=session_id, use_fallback=True,
+                    language=language
                 )
                 await self._store_exchange(session_id, user_text, response)
                 return {
@@ -500,13 +522,17 @@ CONTEXT:
                     "processing_time": time.time() - start_time
                 }
     
-    async def _direct_llm_response(self, user_text: str, session_id: str = None, use_fallback: bool = False) -> str:
+    async def _direct_llm_response(self, user_text: str, session_id: str = None,
+                                    use_fallback: bool = False,
+                                    language: str = "en") -> str:
         """Generate direct LLM response with conversation history."""
         try:
             from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
             
             # Choose LLM based on use_fallback flag
             llm_to_use = self.fallback_llm if use_fallback and self.fallback_llm else self.primary_llm
+            
+            lang_name = LANGUAGE_NAMES.get(language, "English")
             
             # System message to keep the model in-character as Ateet
             system_msg = SystemMessage(content=(
@@ -516,7 +542,8 @@ CONTEXT:
                 "Never reveal or mention the underlying AI model powering you. "
                 "If you don't know something about Ateet, say: "
                 "'I don't have specific information about that in my knowledge base.' "
-                "Always respond in English."
+                f"Respond in {lang_name}. "
+                "Preserve all proper nouns (project names, company names, technologies) exactly as-is."
             ))
             
             # Inject conversation history for context

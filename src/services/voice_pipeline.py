@@ -10,7 +10,9 @@ import time
 import os
 import uuid
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from langdetect import detect, LangDetectException, DetectorFactory
 
 from src.services.stt_service import stt_service
 from src.services.llm_service import llm_service
@@ -23,6 +25,9 @@ from src.constants import ModelName, PipelineSource, LATENCY_WINDOW_SIZE, STREAM
 
 logger = get_logger(__name__)
 
+# Make langdetect deterministic (without this, same text can return different results)
+DetectorFactory.seed = 0
+
 
 @dataclass
 class PipelineResult:
@@ -31,6 +36,7 @@ class PipelineResult:
     response_text: str = ""
     audio_data: bytes = b""
     audio_file_path: str = ""
+    detected_language: str = "en"
     pipeline_latency: float = 0.0
     stt_latency: float = 0.0
     rag_latency: float = 0.0
@@ -52,6 +58,7 @@ class PipelineResult:
             "response_text": self.response_text,
             "audio_data": self.audio_data,
             "audio_file_path": self.audio_file_path,
+            "detected_language": self.detected_language,
             "pipeline_latency": self.pipeline_latency,
             "stt_latency": self.stt_latency,
             "rag_latency": self.rag_latency,
@@ -180,6 +187,7 @@ class VoicePipeline:
                     return result
                 
                 result.transcription = stt_result["text"]
+                result.detected_language = stt_result.get("detected_language", "en")
                 
                 if not result.transcription.strip():
                     result.error = "No speech detected"
@@ -197,7 +205,10 @@ class VoicePipeline:
             # Stage 2: RAG Agent Processing with Semantic Cache
             rag_start = time.time()
             try:
-                rag_result = await self.rag_agent.process_query(result.transcription, session_id)
+                rag_result = await self.rag_agent.process_query(
+                    result.transcription, session_id,
+                    language=result.detected_language
+                )
                 result.rag_latency = time.time() - rag_start
                 
                 if "error" in rag_result:
@@ -336,6 +347,7 @@ class VoicePipeline:
                     return result
                 
                 result.transcription = stt_result["text"]
+                result.detected_language = stt_result.get("detected_language", "en")
                 
                 if not result.transcription.strip():
                     result.error = "No speech detected in audio chunks"
@@ -353,7 +365,10 @@ class VoicePipeline:
             # Stage 2: RAG Agent Processing with Semantic Cache
             rag_start = time.time()
             try:
-                rag_result = await self.rag_agent.process_query(result.transcription, session_id)
+                rag_result = await self.rag_agent.process_query(
+                    result.transcription, session_id,
+                    language=result.detected_language
+                )
                 result.rag_latency = time.time() - rag_start
                 
                 if "error" in rag_result:
@@ -517,6 +532,9 @@ class VoicePipeline:
         result = PipelineResult()
         result.transcription = text  # Input text as "transcription"
         
+        # Detect language from typed text
+        detected_language = self._detect_text_language(text)
+        
         try:
             self.current_session_id = session_id
             self.performance_stats["total_requests"] += 1
@@ -526,7 +544,9 @@ class VoicePipeline:
             # Stage 1: RAG Agent Processing with Semantic Cache
             rag_start = time.time()
             try:
-                rag_result = await self.rag_agent.process_query(text, session_id)
+                rag_result = await self.rag_agent.process_query(
+                    text, session_id, language=detected_language
+                )
                 result.rag_latency = time.time() - rag_start
                 
                 if "error" in rag_result:
@@ -626,6 +646,14 @@ class VoicePipeline:
             self._update_stats(result.pipeline_latency, False)
             log_error_with_context(logger, e, {"session_id": session_id, "text_length": len(text)})
             return result
+    
+    def _detect_text_language(self, text: str) -> str:
+        """Detect language from typed text input using langdetect."""
+        try:
+            lang = detect(text)
+            return lang if lang else "en"
+        except LangDetectException:
+            return "en"
     
     async def _process_audio_chunks(self, audio_chunks: List[bytes]) -> bytes:
         """Combine and process streaming audio chunks for STT."""

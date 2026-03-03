@@ -22,7 +22,7 @@ RUN npm run build
 # ============================================================
 # Stage 2: Combined runtime (Python + Node + nginx)
 # ============================================================
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
@@ -79,10 +79,11 @@ RUN mkdir -p src/db/chroma_db \
 
 # ── nginx config ─────────────────────────────────────────────
 COPY nginx.conf /etc/nginx/nginx.conf.template
+RUN sed -i 's/\r$//' /etc/nginx/nginx.conf.template
 
 # ── Startup script ───────────────────────────────────────────
 COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
 # ── Pre-build vectorstore (needs source code + documents) ────
 # Dummy API keys because Settings requires them, but vectorstore

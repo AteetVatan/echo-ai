@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x  # Print every command for Railway deploy-log debugging
 # Do NOT use `set -e` — we manage errors explicitly so Railway sees logs.
 
 echo "═══════════════════════════════════════════════════"

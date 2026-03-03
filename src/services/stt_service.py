@@ -122,20 +122,27 @@ class STTService:
             if ch > 1:
                 arr = arr.reshape(-1, ch).mean(axis=1)
 
-            # Transcribe with Faster-Whisper
+            # Transcribe with Faster-Whisper (auto-detect language)
             segments, info = self.fw_model.transcribe(
                 arr,
                 beam_size=5,
-                language="en",  # set None for auto-detect
+                language=None,  # auto-detect spoken language
             )
             text = " ".join(seg.text for seg in segments).strip()
 
             latency = time.time() - start_time
-            logger.debug(f"Faster-Whisper transcription completed in {latency:.3f}s")
+            detected_lang = info.language or "en"
+            lang_prob = getattr(info, "language_probability", 0.0)
+            logger.debug(
+                f"Faster-Whisper transcription completed in {latency:.3f}s "
+                f"(lang={detected_lang}, prob={lang_prob:.2f})"
+            )
 
             return {
                 "text": text,
                 "model": ModelName.FASTER_WHISPER_SMALL,
+                "detected_language": detected_lang,
+                "language_probability": lang_prob,
                 "latency": latency,
                 "confidence": 1.0  # FW doesn't return confidence
             }
@@ -174,6 +181,8 @@ class STTService:
             return {
                 "text": transcription,
                 "model": ModelName.OPENAI_WHISPER,
+                "detected_language": "en",  # OpenAI fallback defaults to English
+                "language_probability": 0.0,
                 "latency": latency,
                 "confidence": 1.0  # OpenAI doesn't provide confidence scores
             }

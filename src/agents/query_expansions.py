@@ -214,13 +214,15 @@ QUERY_EXPANSIONS: List[QueryExpansionRule] = [
 _REWRITE_SYSTEM_PROMPT = (
     "You are a query rewriter. The user is visiting Ateet Vatan Bahmani's "
     "AI portfolio assistant. Their input is short, vague, or misspelled.\n\n"
+    "If the input is NOT in English, first translate it to English, then "
+    "rewrite it.\n\n"
     "Your ONLY job: rewrite it into a single, clear, retrieval-friendly "
     "question about Ateet.\n\n"
     "Rules:\n"
     "- Output ONLY the rewritten question, nothing else.\n"
     "- Keep it under 25 words.\n"
     "- Correct any spelling mistakes.\n"
-    "- If the input is a greeting or casual message (hi, hello, hey, etc.), "
+    "- If the input is a greeting or casual message (hi, hello, hey, hallo, etc.), "
     "return it UNCHANGED.\n"
     "- Always frame the question around Ateet's background, career, skills, "
     "projects, or experience."
@@ -233,6 +235,44 @@ def expand_query_regex(user_text: str) -> Optional[str]:
         if pattern.search(user_text):
             return expansion
     return None
+
+
+# ---------------------------------------------------------------------------
+# Translation-only helper (for long non-English queries)
+# ---------------------------------------------------------------------------
+
+_TRANSLATE_ONLY_PROMPT = (
+    "Translate the following text to English. "
+    "Return ONLY the English translation, nothing else. "
+    "Do not rewrite, summarize, or add anything."
+)
+
+
+async def translate_to_english(user_text: str, llm) -> str:
+    """Pure translation for long, clear non-English queries."""
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+
+        response = llm.invoke([
+            SystemMessage(content=_TRANSLATE_ONLY_PROMPT),
+            HumanMessage(content=user_text),
+        ])
+
+        result = (
+            response.content.strip()
+            if hasattr(response, "content")
+            else str(response).strip()
+        )
+
+        if not result or len(result) > 300:
+            return user_text
+
+        logger.info("Translated to English: '%s' → '%s'", user_text, result)
+        return result
+
+    except Exception as e:
+        logger.warning("Translation failed, using original: %s", e)
+        return user_text
 
 
 async def expand_query_llm(user_text: str, llm) -> str:
@@ -271,29 +311,38 @@ async def expand_query_llm(user_text: str, llm) -> str:
         return user_text
 
 
-async def expand_query(user_text: str, llm=None) -> str:
+async def expand_query(user_text: str, llm=None, language: str = "en") -> str:
     """Hybrid query expansion: regex first, then LLM fallback.
+
+    For non-English input, translation is merged into the expansion step:
+    - Long non-English queries (≥5 words): translate only (query is already clear)
+    - Short non-English queries: translate + rewrite via LLM
 
     Args:
         user_text: Raw user input.
         llm:       Optional LangChain chat model for fallback rewrites.
+        language:  Detected language code (e.g. "en", "de", "fr").
 
     Returns:
-        Expanded (or original) query string.
+        Expanded (or translated) query string in English.
     """
     words = user_text.strip().split()
 
-    # Already a full question — skip expansion
-    if len(words) >= 5:
+    # English long queries: already clear, skip expansion
+    if language == "en" and len(words) >= 5:
         return user_text
 
-    # 1. Try regex (instant, free)
+    # Long non-English: translate only (don't rewrite clear queries)
+    if language != "en" and len(words) >= 5 and llm is not None:
+        return await translate_to_english(user_text, llm)
+
+    # 1. Try regex (instant, free — only matches English keywords)
     regex_result = expand_query_regex(user_text)
     if regex_result:
         logger.info("Query expanded (regex): '%s' → '%s'", user_text, regex_result)
         return regex_result
 
-    # 2. LLM fallback for unmatched short queries
+    # 2. Short non-English or short unmatched English: LLM translate + rewrite
     if llm is not None:
         return await expand_query_llm(user_text, llm)
 
