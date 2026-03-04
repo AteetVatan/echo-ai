@@ -12,6 +12,7 @@ Step-by-step instructions to get EchoAI running on your local machine.
 | **Node.js** | 18+ | Frontend build tooling |
 | **npm** | 9+ | Comes with Node.js |
 | **Git** | Any | To clone the repo |
+| **Supabase account** | — | Database + Storage ([supabase.com](https://supabase.com)) |
 | **Docker** *(optional)* | 20+ | For containerised deployment |
 
 ### API Keys Required
@@ -23,8 +24,9 @@ You will need at least one of the following LLM API keys:
 | `DEEPSEEK_API_KEY` | **Yes** | Primary LLM |
 | `OPENAI_API_KEY` | Recommended | STT fallback (Whisper API) |
 | `MISTRAL_API_KEY` | Recommended | Fallback LLM |
-
-> **Supabase** credentials are optional — the app works with local SQLite if Supabase is not configured.
+| `SUPABASE_URL` | **Yes** | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Supabase service role key (Settings → API) |
+| `SUPABASE_DB_URL` | **Yes** | Supabase Postgres connection string |
 
 ---
 
@@ -61,7 +63,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-> ⏳ This installs PyTorch, Transformers, ChromaDB, LangChain, etc. — the first install may take several minutes.
+> ⏳ This installs PyTorch, Transformers, Supabase, LangChain, etc. — the first install may take several minutes.
 
 ### 4. Configure Environment Variables
 
@@ -117,6 +119,82 @@ npm run dev
 ```
 
 The Next.js dev server will start on `http://localhost:3000`.
+
+### 7. Set Up Supabase Database
+
+EchoAI uses Supabase for audio caching, reply caching, and vector search (pgvector).
+
+#### a) Get your Supabase credentials
+
+1. Go to [supabase.com](https://supabase.com) → create a project (or use existing)
+2. **Settings → API** → copy `URL` and `service_role` secret key
+3. **Connect button** (top of dashboard) → copy the `URI` connection string
+4. Add all three to `.env`:
+   ```dotenv
+   SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+   SUPABASE_DB_URL=postgresql://postgres.YOUR_PROJECT:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+   ```
+
+#### b) Create database tables
+
+Run the SQL migration in the **Supabase SQL Editor** (Dashboard → SQL Editor → New query):
+
+```sql
+-- Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Audio cache (TTS audio metadata)
+CREATE TABLE IF NOT EXISTS audio_cache (
+    id SERIAL PRIMARY KEY,
+    text TEXT NOT NULL,
+    voice_id TEXT NOT NULL,
+    storage_path TEXT NOT NULL,
+    file_size_bytes INTEGER,
+    text_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(text_hash, voice_id)
+);
+CREATE INDEX IF NOT EXISTS idx_audio_cache_lookup ON audio_cache(text_hash, voice_id);
+
+-- Reply cache (Q&A pairs)
+CREATE TABLE IF NOT EXISTS reply_cache (
+    id SERIAL PRIMARY KEY,
+    user_text TEXT NOT NULL,
+    response_text TEXT NOT NULL,
+    audio_storage_path TEXT,
+    text_hash TEXT NOT NULL UNIQUE,
+    vector_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reply_cache_hash ON reply_cache(text_hash);
+
+-- Vector search tables (pgvector, 384-dim for all-MiniLM-L6-v2)
+CREATE TABLE IF NOT EXISTS documents_reply_cache (
+    id TEXT PRIMARY KEY, content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}', embedding vector(384)
+);
+CREATE TABLE IF NOT EXISTS documents_self_info_facts (
+    id TEXT PRIMARY KEY, content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}', embedding vector(384)
+);
+CREATE TABLE IF NOT EXISTS documents_self_info_evidence (
+    id TEXT PRIMARY KEY, content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}', embedding vector(384)
+);
+```
+
+#### c) Create the Storage bucket
+
+1. Dashboard → **Storage** → **New bucket**
+2. Name: `audio-cache`, Public: No, File size limit: 10MB
+
+#### d) Run data migration (if upgrading from local storage)
+
+```bash
+# Migrate local audio_cache/ directory + SQLite data → Supabase
+python migrate_audio_to_supabase.py
+```
 
 ---
 
@@ -216,15 +294,14 @@ All variables are configured in the `.env` file. Below is the full list:
 | `SELF_INFO_REBUILD` | `0` | Set to `1` to force-rebuild the vector index on startup |
 | `EVIDENCE_DOCS_DIR` | `rag_persona_db/document` | Directory containing evidence documents for RAG |
 
-### Database (Optional)
+### Database (Supabase — Required)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SUPABASE_URL` | — | Supabase project URL |
+| `SUPABASE_URL` | — | Supabase project URL (required) |
 | `SUPABASE_ANON_KEY` | — | Supabase anon/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key |
-| `SUPABASE_DB_PASSWORD` | — | Supabase DB password |
-| `SUPABASE_DB_URL` | — | Full Supabase PostgreSQL URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key (required) |
+| `SUPABASE_DB_URL` | — | Full Supabase PostgreSQL connection URL (required) |
 
 ### Server & Audio
 
@@ -251,6 +328,6 @@ All variables are configured in the `.env` file. Below is the full list:
 | PyTorch install fails | Try installing PyTorch separately first: `pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu` |
 | `.env` not found error | Copy `env.example` to `.env` and fill in your API keys. |
 | Port 8000 already in use | Change `PORT` in `.env`, or stop the other process. |
-| ChromaDB build errors | Ensure you have a C++ compiler installed (Visual Studio Build Tools on Windows, `gcc` on Linux). |
+| Supabase connection error | Verify `SUPABASE_DB_URL` format is `postgresql://postgres.PROJECT:PASSWORD@...pooler.supabase.com:6543/postgres` |
 | Frontend `npm install` fails | Delete `node_modules` and `package-lock.json` in `frontend/`, then retry. |
-| RAG index issues | Set `SELF_INFO_REBUILD=1` in `.env` to force a full rebuild on next startup. |
+| pgvector extension error | Enable pgvector via Supabase SQL Editor: `CREATE EXTENSION IF NOT EXISTS vector;` |
