@@ -89,26 +89,26 @@ See the full [Environment Variables Reference](#-environment-variables-reference
 python run_dev.py
 ```
 
-This starts the FastAPI server with:
-- **Hot reload** enabled
-- **Debug logging** enabled
+This starts both development servers:
+- **FastAPI hot reload** on port 8000
+- **Next.js hot reload** on port 3000
 - **CORS** configured for development
-- **Static file serving** for the built-in HTML frontend
 
-The backend will be available at:
+The development app will be available at:
 
 | URL | Description |
 |-----|-------------|
 | `http://localhost:8000` | Backend API root |
 | `http://localhost:8000/docs` | Interactive Swagger docs |
 | `http://localhost:8000/health` | Health-check endpoint |
-| `http://localhost:8000/frontend` | Built-in HTML client |
+| `http://localhost:3000` | Next.js web client |
+| `http://localhost:8000/frontend` | Legacy dev redirect to the web client |
 | `http://localhost:8000/api/chat` | REST chat endpoint (POST) |
 | `http://localhost:8000/api/persona` | Persona info endpoint (GET) |
 
-### 6. Set Up & Start the Frontend
+### 6. Set Up & Start the Frontend Manually
 
-The Next.js frontend (React 19 + Tailwind CSS v4) provides a richer UI than the built-in HTML client.
+The Next.js frontend (React 19 + Tailwind CSS v4) can also be run manually.
 
 Open a **second terminal** (keep the backend running):
 
@@ -216,9 +216,9 @@ docker build -t echoai .
 docker run -p 8000:8000 --env-file .env echoai
 ```
 
-The app is now accessible at `http://localhost:8000`.
+The backend is now accessible at `http://localhost:8000`.
 
-> **Note:** The Docker image includes the backend only. For the Next.js frontend, run it separately as described in step 6 above, or access the built-in HTML client at `http://localhost:8000/frontend`.
+> **Note:** For local development, `python run_dev.py` starts the backend and Next.js frontend together. If you run the backend manually, start the frontend separately as described in step 6 above.
 
 ---
 
@@ -290,7 +290,6 @@ All variables are configured in the `.env` file. Below is the full list:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SELF_INFO_JSON_PATH` | `src/documents/self_info.json` | Path to the persona JSON knowledge file |
-| `SELF_INFO_CHROMA_DIR` | `src/db/self_info_knowledge_v2` | ChromaDB vector store directory |
 | `SELF_INFO_REBUILD` | `0` | Set to `1` to force-rebuild the vector index on startup |
 | `EVIDENCE_DOCS_DIR` | `rag_persona_db/document` | Directory containing evidence documents for RAG |
 

@@ -61,30 +61,41 @@ PORT=3000 HOSTNAME=0.0.0.0 node server.js &
 FRONTEND_PID=$!
 
 # ── 5. Wait for backend + frontend to be ready ──────────────
+# Require the frontend to return 200 on `/` REQUIRED_HITS times in a row.
+# `curl -sf` already rejects non-2xx. Multiple hits ensure Next.js has
+# compiled & cached the root page bundle before Railway routes traffic —
+# otherwise users get a raw 404 on first cold-start request.
 echo "  Waiting for services to become ready..."
-MAX_WAIT=120
+MAX_WAIT=180
 WAITED=0
+FRONTEND_HITS=0
+REQUIRED_HITS=3
 while [ $WAITED -lt $MAX_WAIT ]; do
     BACKEND_OK=0
     FRONTEND_OK=0
 
     curl -sf http://127.0.0.1:$BACKEND_PORT/health > /dev/null 2>&1 && BACKEND_OK=1
-    curl -sf http://127.0.0.1:3000 > /dev/null 2>&1 && FRONTEND_OK=1
+    if curl -sf http://127.0.0.1:3000/ > /dev/null 2>&1; then
+        FRONTEND_OK=1
+        FRONTEND_HITS=$((FRONTEND_HITS + 1))
+    else
+        FRONTEND_HITS=0
+    fi
 
-    if [ $BACKEND_OK -eq 1 ] && [ $FRONTEND_OK -eq 1 ]; then
-        echo "  Both services are ready! (waited ${WAITED}s)"
+    if [ $BACKEND_OK -eq 1 ] && [ $FRONTEND_HITS -ge $REQUIRED_HITS ]; then
+        echo "  Both services are ready! (waited ${WAITED}s, frontend warm after ${FRONTEND_HITS} consecutive 200s)"
         break
     fi
 
     sleep 2
     WAITED=$((WAITED + 2))
-    [ $((WAITED % 10)) -eq 0 ] && echo "  Still waiting... (${WAITED}s) backend=$BACKEND_OK frontend=$FRONTEND_OK"
+    [ $((WAITED % 10)) -eq 0 ] && echo "  Still waiting... (${WAITED}s) backend=$BACKEND_OK frontend_hits=$FRONTEND_HITS/$REQUIRED_HITS"
 done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo "  WARNING: Services did not become ready within ${MAX_WAIT}s"
     echo "    Backend reachable: $BACKEND_OK"
-    echo "    Frontend reachable: $FRONTEND_OK"
+    echo "    Frontend consecutive 200s: $FRONTEND_HITS/$REQUIRED_HITS"
 fi
 
 echo "═══════════════════════════════════════════════════"

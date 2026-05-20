@@ -13,6 +13,7 @@ from enum import Enum
 # WebSocket message types (client → server and server → client)
 # ---------------------------------------------------------------------------
 
+
 class WSMessageType(str, Enum):
     AUDIO = "audio"
     AUDIO_CHUNK = "audio_chunk"
@@ -38,6 +39,7 @@ class WSMessageType(str, Enum):
 # Pipeline / RAG source labels
 # ---------------------------------------------------------------------------
 
+
 class PipelineSource(str, Enum):
     CACHE = "cache"
     RAG_SELF_INFO = "rag_self_info"
@@ -52,6 +54,7 @@ class PipelineSource(str, Enum):
 # ---------------------------------------------------------------------------
 # Model identifiers
 # ---------------------------------------------------------------------------
+
 
 class ModelName(str, Enum):
     DEEPSEEK_AI = "deepseek_ai"
@@ -71,6 +74,7 @@ class ModelName(str, Enum):
 # Chat roles
 # ---------------------------------------------------------------------------
 
+
 class ChatRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
@@ -81,6 +85,7 @@ class ChatRole(str, Enum):
 # Knowledge / cache metadata
 # ---------------------------------------------------------------------------
 
+
 class KnowledgeType(str, Enum):
     SELF_INFO = "self_info"
     REPLY_CACHE = "reply_cache"
@@ -88,14 +93,14 @@ class KnowledgeType(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Chroma collection names
+# pgvector table names (Supabase)
 # ---------------------------------------------------------------------------
 
-class ChromaCollection(str, Enum):
-    REPLY_CACHE = "echoai_reply_cache"
-    SELF_INFO = "echoai_self_info"
-    SELF_INFO_FACTS = "echoai_self_info_facts"
-    SELF_INFO_EVIDENCE = "echoai_self_info_evidence"
+
+class PgvectorTable(str, Enum):
+    REPLY_CACHE = "documents_reply_cache"
+    SELF_INFO_FACTS = "documents_self_info_facts"
+    SELF_INFO_EVIDENCE = "documents_self_info_evidence"
 
 
 # ---------------------------------------------------------------------------
@@ -110,14 +115,19 @@ LATENCY_WINDOW_SIZE = 100
 MAX_CONVERSATION_HISTORY = 10
 LLM_RESPONSE_MAX_LENGTH = 1000
 
-AUDIO_CHUNK_MAX_BYTES = 1024 * 1024        # 1 MB per chunk
+AUDIO_CHUNK_MAX_BYTES = 1024 * 1024  # 1 MB per chunk
 AUDIO_BUFFER_MAX_BYTES = 10 * 1024 * 1024  # 10 MB total buffer
 
 TEXT_SPLITTER_CHUNK_SIZE = 500
 TEXT_SPLITTER_CHUNK_OVERLAP = 50
 RAG_RETRIEVER_TOP_K = 5
+RAG_LLM_MAX_TOKENS = 1500
 STREAMING_BATCH_SIZE = 5
 STREAM_PROCESSING_BATCH_SIZE = 10
+
+INSUFFICIENT_SELF_INFO_ANSWER = (
+    "I don't have that information in my self_info knowledge base."
+)
 
 TAIL_PAD_SECONDS = 0.01
 NORMALIZE_TARGET_RMS = 0.1
@@ -129,6 +139,7 @@ DEFAULT_AUDIO_CHUNK_SIZE = 1024
 # ---------------------------------------------------------------------------
 # API route paths
 # ---------------------------------------------------------------------------
+
 
 class APIRoute(str, Enum):
     CHAT = "/api/chat"

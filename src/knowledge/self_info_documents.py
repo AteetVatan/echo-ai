@@ -45,8 +45,8 @@ def to_langchain_documents(items: list[SelfInfoItem]) -> list[Document]:
             page_content=f"Q: {item.question}\nA: {item.answer}",
             metadata={
                 "doc_type": item.doc_type,
-                "tags": json.dumps(item.tags),          # JSON string (Chroma can't store lists)
-                "tags_str": ", ".join(item.tags),        # comma-sep for post-filtering
+                "tags": json.dumps(item.tags),  # JSON string (Chroma can't store lists)
+                "tags_str": ", ".join(item.tags),  # comma-sep for post-filtering
                 "source": "self_info.json",
                 "stable_id": stable_id,
                 "layer": "facts",

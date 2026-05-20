@@ -20,13 +20,14 @@ export function TypingIndicator({ voiceState }: TypingIndicatorProps) {
     // Progressive phase for processing state
     useEffect(() => {
         if (voiceState !== "processing") {
-            setPhase(0);
             return;
         }
+        const t0 = setTimeout(() => setPhase(0), 0);
         const t1 = setTimeout(() => setPhase(1), 500);
         const t2 = setTimeout(() => setPhase(2), 3000);
         const t3 = setTimeout(() => setPhase(3), 6000);
         return () => {
+            clearTimeout(t0);
             clearTimeout(t1);
             clearTimeout(t2);
             clearTimeout(t3);

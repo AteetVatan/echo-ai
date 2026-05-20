@@ -5,7 +5,6 @@ These tests require the vector store to be built first.
 Run: python -m src.tools.self_info_cli build
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -14,10 +13,11 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv()
 
-from src.knowledge.query_router import route_query
+from src.knowledge.query_router import route_query  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -73,13 +73,15 @@ class TestQueryRouter:
 # Retriever tests (require built store)
 # ---------------------------------------------------------------------------
 
+
 def _store_is_built() -> bool:
     """Check if the vector store has been built."""
     try:
         from src.knowledge.self_info_vectorstore import get_self_info_store
+
         stores = get_self_info_store()
         return stores["facts"]._collection.count() > 0
-    except Exception:
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
         return False
 
 
@@ -87,7 +89,9 @@ def _store_is_built() -> bool:
 def built_store():
     """Skip if store not built."""
     if not _store_is_built():
-        pytest.skip("Vector store not built. Run: python -m src.tools.self_info_cli build")
+        pytest.skip(
+            "Vector store not built. Run: python -m src.tools.self_info_cli build"
+        )
 
 
 class TestRetriever:
@@ -120,9 +124,7 @@ class TestRetriever:
         """Filtering by doc_type returns only matching docs."""
         from src.knowledge.self_info_retriever import retrieve_self_info
 
-        docs = retrieve_self_info(
-            "Tell me about yourself", doc_type="about_me", k=4
-        )
+        docs = retrieve_self_info("Tell me about yourself", doc_type="about_me", k=4)
         for doc in docs:
             if doc.metadata.get("layer") == "facts":
                 assert doc.metadata.get("doc_type") == "about_me"

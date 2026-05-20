@@ -42,8 +42,6 @@ export function ChatContainer() {
         error,
         send,
         clearChat,
-        startTalkMode,
-        stopTalkMode,
         toggleVoiceMode,
         playAudio,
     } = useChat();

@@ -7,13 +7,14 @@ import io
 import os
 import math
 import wave
-import tempfile
 import subprocess
 from typing import List, Optional, Tuple
 
 import numpy as np
 from imageio_ffmpeg import get_ffmpeg_exe
 
+from src.constants import NORMALIZE_MAX_GAIN, NORMALIZE_TARGET_RMS, TAIL_PAD_SECONDS
+from src.exceptions import AudioProcessingError
 from src.utils import get_logger, get_settings
 
 logger = get_logger(__name__)
@@ -46,14 +47,20 @@ class AudioProcessor:
         cmd = [
             self.ffmpeg_path,
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
             "-nostdin",
             "-y",
-            "-i", "pipe:0",
-            "-ac", str(self.target_channels),
-            "-ar", str(self.target_sample_rate),
-            "-acodec", "pcm_s16le",
-            "-f", "wav",
+            "-i",
+            "pipe:0",
+            "-ac",
+            str(self.target_channels),
+            "-ar",
+            str(self.target_sample_rate),
+            "-acodec",
+            "pcm_s16le",
+            "-f",
+            "wav",
             "pipe:1",
         ]
         try:
@@ -65,31 +72,46 @@ class AudioProcessor:
                 check=True,
             )
             return proc.stdout
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg conversion failed: {e.stderr.decode(errors='ignore')}")
-            raise       
-      
-        
-    def _pcm_chunks_to_wav_once(self,pcm_chunks, rate=16000, channels=1):
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode(errors="ignore")
+            logger.error("FFmpeg conversion failed: %s", stderr)
+            raise AudioProcessingError("FFmpeg conversion failed") from exc
+
+    def _pcm_chunks_to_wav_once(self, pcm_chunks, *, rate=16000, channels=1):
         try:
             pcm = b"".join(pcm_chunks)  # join raw PCM bytes
             cmd = [
                 self.ffmpeg_path,
-                "-f", "s16le",
-                "-ar", str(rate),
-                "-ac", str(channels),
-                "-i", "pipe:0",
-                "-acodec", "pcm_s16le",
-                "-f", "wav",
-                "-loglevel", "error", "-hide_banner",
+                "-f",
+                "s16le",
+                "-ar",
+                str(rate),
+                "-ac",
+                str(channels),
+                "-i",
+                "pipe:0",
+                "-acodec",
+                "pcm_s16le",
+                "-f",
+                "wav",
+                "-loglevel",
+                "error",
+                "-hide_banner",
                 "pipe:1",
             ]
-            p = subprocess.run(cmd, input=pcm, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            p = subprocess.run(
+                cmd,
+                input=pcm,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
             return p.stdout
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg conversion failed: {e.stderr.decode(errors='ignore')}")
-            raise  
-    
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode(errors="ignore")
+            logger.error("FFmpeg conversion failed: %s", stderr)
+            raise AudioProcessingError("FFmpeg conversion failed") from exc
+
     @staticmethod
     def _read_wav_to_np(wav_bytes: bytes) -> Tuple[np.ndarray, int, int]:
         """Read WAV bytes into (int16 numpy array [samples, channels], sample_rate, channels)."""
@@ -99,7 +121,9 @@ class AudioProcessor:
             ch = w.getnchannels()
             sw = w.getsampwidth()
             if sw != 2:
-                raise ValueError(f"Expected 16-bit WAV, got sample width {sw*8} bits.")
+                raise ValueError(
+                    f"Expected 16-bit WAV, got sample width {sw * 8} bits."
+                )
             frames = w.readframes(w.getnframes())
         arr = np.frombuffer(frames, dtype=np.int16)
         if ch > 1:
@@ -116,7 +140,9 @@ class AudioProcessor:
         if arr.ndim == 1:
             arr = arr.reshape(-1, 1)
         if arr.shape[1] != channels:
-            raise ValueError(f"Channel mismatch: arr has {arr.shape[1]}, expected {channels}")
+            raise ValueError(
+                f"Channel mismatch: arr has {arr.shape[1]}, expected {channels}"
+            )
         bio = io.BytesIO()
         with wave.open(bio, "wb") as w:
             w.setnchannels(channels)
@@ -127,12 +153,16 @@ class AudioProcessor:
 
     # ---------- Public API ----------
 
-    async def process_audio_for_stt(self, audio_data: bytes, input_format: str = "webm") -> bytes:
+    async def process_audio_for_stt(
+        self, audio_data: bytes, input_format: str = "webm"
+    ) -> bytes:
         """
         Convert input audio -> mono 16k WAV PCM16, normalize gently, and add tiny tail padding.
         """
         try:
-            logger.debug(f"Processing audio: format={input_format}, size={len(audio_data)} bytes")
+            logger.debug(
+                f"Processing audio: format={input_format}, size={len(audio_data)} bytes"
+            )
 
             # 1) Convert to canonical WAV PCM16 mono 16k
             wav = self._ffmpeg_convert_to_wav_pcm16(audio_data, input_format)
@@ -141,22 +171,26 @@ class AudioProcessor:
             samples, sr, ch = self._read_wav_to_np(wav)
 
             # 3) Tail pad ~10 ms (to avoid ASR truncation at end)
-            pad_len = max(1, int(0.01 * sr))  # ~10ms
+            pad_len = max(1, int(TAIL_PAD_SECONDS * sr))
             pad = np.zeros((pad_len, ch), dtype=np.int16)
             samples = np.vstack([samples, pad])
-
-            # 4) Gentle normalization to target RMS ~ -20 dBFS (~0.1 in float)
-            samples = self._normalize_rms(samples, target_rms=0.1, max_gain=10.0)
+            samples = self._normalize_rms(
+                samples,
+                target_rms=NORMALIZE_TARGET_RMS,
+                max_gain=NORMALIZE_MAX_GAIN,
+            )
 
             # 5) Back to bytes
             out_wav = self._write_np_to_wav(samples, sr, ch)
             return out_wav
 
-        except Exception as e:
-            logger.error(f"Failed to process audio: {e}")
-            raise        
-    
-    async def process_audio_chunks_for_stt(self, audio_chunks: List[bytes], input_format: str = "webm") -> bytes:
+        except (AudioProcessingError, ValueError, wave.Error) as exc:
+            logger.error("Failed to process audio: %s", exc)
+            raise AudioProcessingError("Failed to process audio for STT") from exc
+
+    async def process_audio_chunks_for_stt(
+        self, audio_chunks: List[bytes], input_format: str = "webm"
+    ) -> bytes:
         """
         Convert input audio -> mono 16k WAV PCM16, normalize gently, and add tiny tail padding.
         """
@@ -167,25 +201,31 @@ class AudioProcessor:
             samples, sr, ch = self._read_wav_to_np(wav)
 
             # 3) Tail pad ~10 ms (to avoid ASR truncation at end)
-            pad_len = max(1, int(0.01 * sr))  # ~10ms
+            pad_len = max(1, int(TAIL_PAD_SECONDS * sr))
             pad = np.zeros((pad_len, ch), dtype=np.int16)
             samples = np.vstack([samples, pad])
-
-            # 4) Gentle normalization to target RMS ~ -20 dBFS (~0.1 in float)
-            samples = self._normalize_rms(samples, target_rms=0.1, max_gain=10.0)
+            samples = self._normalize_rms(
+                samples,
+                target_rms=NORMALIZE_TARGET_RMS,
+                max_gain=NORMALIZE_MAX_GAIN,
+            )
 
             # 5) Back to bytes
             out_wav = self._write_np_to_wav(samples, sr, ch)
             return out_wav
 
-        except Exception as e:
-            logger.error(f"Failed to process audio: {e}")
-            raise
+        except (AudioProcessingError, ValueError, wave.Error) as exc:
+            logger.error("Failed to process audio chunks: %s", exc)
+            raise AudioProcessingError(
+                "Failed to process audio chunks for STT"
+            ) from exc
 
     # ---------- Processing ops (NumPy) ----------
 
     @staticmethod
-    def _normalize_rms(arr: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0) -> np.ndarray:
+    def _normalize_rms(
+        arr: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0
+    ) -> np.ndarray:
         """
         Normalize int16 signal to a desired RMS (approx -20 dBFS).
         Safely clamps and limits gain to avoid noise blowup.
@@ -204,7 +244,9 @@ class AudioProcessor:
 
         return (f * 32767.0).astype(np.int16)
 
-    def create_audio_chunks(self, audio_data: bytes, chunk_duration_ms: int = 1000) -> List[bytes]:
+    def create_audio_chunks(
+        self, audio_data: bytes, chunk_duration_ms: int = 1000
+    ) -> List[bytes]:
         """Split WAV PCM16 bytes into fixed-duration chunks."""
         samples, sr, ch = self._read_wav_to_np(audio_data)
         samples_per_chunk = max(1, int((chunk_duration_ms / 1000.0) * sr))
@@ -216,7 +258,9 @@ class AudioProcessor:
             chunk_wav = self._write_np_to_wav(chunk_arr, sr, ch)
             chunks.append(chunk_wav)
 
-        logger.debug(f"Created {len(chunks)} audio chunks of ~{chunk_duration_ms}ms each")
+        logger.debug(
+            f"Created {len(chunks)} audio chunks of ~{chunk_duration_ms}ms each"
+        )
         return chunks
 
     def combine_audio_chunks(self, audio_chunks: List[bytes]) -> bytes:
@@ -314,7 +358,9 @@ class AudioProcessor:
             return []
         # Mixdown if needed (already mono by design, but safe)
         if ch > 1:
-            samples = samples.mean(axis=1, dtype=np.float32).astype(np.int16).reshape(-1, 1)
+            samples = (
+                samples.mean(axis=1, dtype=np.float32).astype(np.int16).reshape(-1, 1)
+            )
 
         frame_len = max(1, int(sr * frame_sec))
         f = samples.astype(np.float32) / 32768.0

@@ -58,6 +58,7 @@ def _make_evidence_stable_id(source: str, chunk_index: int) -> str:
 # Markdown (GitHub READMEs)
 # ------------------------------------------------------------------
 
+
 def _load_markdown(path: Path) -> list[Document]:
     """Split markdown by headers, then sub-split large sections."""
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -99,8 +100,14 @@ def _load_markdown(path: Path) -> list[Document]:
 # DOCX (CV)
 # ------------------------------------------------------------------
 
+
 def _load_docx(path: Path) -> list[Document]:
-    """Load .docx and split by paragraphs / recursive chunks."""
+    """Load .docx and split by paragraphs / recursive chunks.
+
+    Some converted CVs store header/contact text in text boxes, which
+    python-docx does not expose through ``document.paragraphs``. Iterating
+    the raw Word XML text nodes keeps those fields available to retrieval.
+    """
     try:
         from docx import Document as DocxDocument  # python-docx
     except ImportError:
@@ -108,7 +115,12 @@ def _load_docx(path: Path) -> list[Document]:
         return []
 
     doc = DocxDocument(str(path))
-    full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    text_nodes = [
+        node.text.strip()
+        for node in doc.element.iter()
+        if node.tag.endswith("}t") and node.text and node.text.strip()
+    ]
+    full_text = "\n".join(text_nodes)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=_DEFAULT_CHUNK_SIZE,
@@ -127,6 +139,7 @@ def _load_docx(path: Path) -> list[Document]:
 # ------------------------------------------------------------------
 # CSV (LinkedIn data exports)
 # ------------------------------------------------------------------
+
 
 def _load_csv(path: Path) -> list[Document]:
     """Parse a LinkedIn CSV into one document per row (or combined)."""
@@ -162,6 +175,7 @@ def _load_csv(path: Path) -> list[Document]:
 # ------------------------------------------------------------------
 # Plain text / PDF fallback
 # ------------------------------------------------------------------
+
 
 def _load_text(path: Path) -> list[Document]:
     """Fallback loader for .txt files."""
@@ -216,6 +230,7 @@ def _load_pdf(path: Path) -> list[Document]:
 # Public API
 # ------------------------------------------------------------------
 
+
 def load_evidence_documents(evidence_dir: Path | str) -> list[Document]:
     """Load all evidence documents from *evidence_dir* and its subdirectories.
 
@@ -254,6 +269,9 @@ def load_evidence_documents(evidence_dir: Path | str) -> list[Document]:
         elif suffix == ".docx":
             chunks = _load_docx(path)
         elif suffix == ".pdf":
+            if name_lower == "cv.pdf" and path.with_suffix(".docx").exists():
+                logger.debug("Skipping duplicate CV PDF because CV.docx exists: %s", path)
+                continue
             chunks = _load_pdf(path)
         elif suffix == ".txt":
             chunks = _load_text(path)

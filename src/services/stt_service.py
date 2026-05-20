@@ -1,356 +1,379 @@
-"""
-Speech-to-Text service for EchoAI voice chat system.
+"""Speech-to-text service using Faster-Whisper with OpenAI fallback."""
 
-This module provides STT functionality using Hugging Face Whisper as primary
-and OpenAI Whisper as fallback, with streaming audio support.
-"""
-import os
-import io
 import asyncio
+import io
+import os
 import time
-from typing import Dict, Any, List, Optional
-import aiohttp
-import openai
-from faster_whisper import WhisperModel
 import wave
-from imageio_ffmpeg import get_ffmpeg_exe
-import soundfile as sf
-import torch
+from typing import Any
+
 import numpy as np
-from src.utils import get_settings
-from src.utils import get_logger, log_performance, log_error_with_context
+import openai
+import torch
+from faster_whisper import WhisperModel
+from imageio_ffmpeg import get_ffmpeg_exe
+
+from src.constants import LATENCY_WINDOW_SIZE, ModelName, STREAMING_BATCH_SIZE
+from src.exceptions import AudioProcessingError, STTError
+from src.utils import get_logger, get_settings, log_error_with_context, log_performance
 from src.utils.audio import audio_processor, audio_stream_processor
-from src.constants import ModelName, LATENCY_WINDOW_SIZE, STREAMING_BATCH_SIZE
-from src.exceptions import STTError
 
 
 logger = get_logger(__name__)
 settings = get_settings()
+WHISPER_ERRORS = (
+    STTError,
+    AudioProcessingError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    wave.Error,
+)
+OPENAI_STT_ERRORS = (STTError, AudioProcessingError, openai.OpenAIError, AttributeError)
 
 
 class STTService:
-    """Speech-to-Text service with streaming support."""
-    
-    def __init__(self):
-        self.hf_pipeline = None
+    """Speech-to-text service with streaming support."""
+
+    def __init__(self) -> None:
+        self.fw_model = None
         self.openai_client = None
+        self.fallback_stt_model = self._normalize_openai_stt_model(
+            settings.FALLBACK_STT_MODEL
+        )
         self.models_warmed_up = False
-        self.performance_stats = {
+        self.performance_stats = self._new_performance_stats()
+        self._ensure_ffmpeg_on_path()
+
+    @staticmethod
+    def _new_performance_stats() -> dict[str, Any]:
+        """Create a fresh performance stats dictionary."""
+        return {
             "total_transcriptions": 0,
             "successful_transcriptions": 0,
             "failed_transcriptions": 0,
             "avg_latency": 0.0,
-            "latencies": []
+            "latencies": [],
         }
-        
-        #to ensure any library (like Hugging Face) that calls ffmpeg without a full path will still find it.
-        # Ensure ffmpeg is discoverable by libs expecting it on PATH
+
+    def _ensure_ffmpeg_on_path(self) -> None:
+        """Expose bundled ffmpeg to libraries that shell out to ffmpeg."""
         try:
             ffmpeg_path = get_ffmpeg_exe()
             ffmpeg_dir = os.path.dirname(ffmpeg_path)
-            path_parts = os.environ.get("PATH", "").split(os.pathsep)
-            if ffmpeg_dir not in path_parts:
-                os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
-            logger.info(f"FFmpeg available at: {ffmpeg_path}")
-        except Exception as e:
-            logger.warning(f"Could not initialize ffmpeg from imageio-ffmpeg: {e}")
-        
-        
-    
-    async def warm_up_models(self) -> None:
-        """Warm up STT models for optimal performance."""
-        try:
-            logger.info("Warming up STT models...")
-            
-            # Dynamic hardware detection
-            if torch.cuda.is_available():
-                device = "cuda"
-                compute_type = "float16"  # GPU-friendly
-                model_size = "medium"     # use larger model for accuracy on GPU
-                logger.info("CUDA detected — using GPU with float16 and medium model")
-            else:
-                device = "cpu"
-                compute_type = "int8"     # fastest for CPU
-                model_size = "small"      # small model for speed on CPU
-                logger.info("No GPU detected — using CPU with int8 and small model")
+            self._prepend_path_once(ffmpeg_dir)
+            logger.info("FFmpeg available at: %s", ffmpeg_path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.warning("Could not initialize ffmpeg from imageio-ffmpeg: %s", exc)
 
-            # Load Faster-Whisper model (offload to thread — it's a heavy sync call)
-            try:
-                self.fw_model = await asyncio.to_thread(
-                    WhisperModel,
-                    model_size,   # dynamic based on hardware
-                    device=device,
-                    compute_type=compute_type,
-                )
-                logger.info(f"Faster-Whisper model loaded ({model_size}, {device}, {compute_type})")
-            except Exception as e:
-                logger.warning(f"Failed to load Faster-Whisper model: {e}")
-                
-            # Warm up OpenAI client
-            if settings.OPENAI_API_KEY:
-                try:
-                    self.openai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-                    logger.info("OpenAI client initialized")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize OpenAI client: {str(e)}")
-            
-            self.models_warmed_up = True
-            logger.info("STT models warmed up successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to warm up STT models: {str(e)}")
-    
-    async def _transcribe_with_whisper(self, audio_data: bytes) -> Dict[str, Any]:
-        """Transcribe audio using Faster-Whisper (local)."""
+    @staticmethod
+    def _prepend_path_once(directory: str) -> None:
+        """Prepend a directory to PATH when it is not already present."""
+        path_value = os.environ.get("PATH", "")
+        if directory in path_value.split(os.pathsep):
+            return
+        os.environ["PATH"] = directory + os.pathsep + path_value
+
+    async def warm_up_models(self) -> None:
+        """Warm up STT models for lower first-request latency."""
+        logger.info("Warming up STT models...")
+        await self._load_faster_whisper_model()
+        self._warm_up_openai_client()
+        self.models_warmed_up = True
+        logger.info("STT models warmed up successfully")
+
+    async def _load_faster_whisper_model(self) -> None:
+        """Load the local Faster-Whisper model off the event loop."""
+        model_size, device, compute_type = self._whisper_runtime_config()
+        try:
+            self.fw_model = await asyncio.to_thread(
+                WhisperModel,
+                model_size,
+                device=device,
+                compute_type=compute_type,
+            )
+            logger.info(
+                "Faster-Whisper model loaded (%s, %s, %s)",
+                model_size,
+                device,
+                compute_type,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.warning("Failed to load Faster-Whisper model: %s", exc)
+
+    @staticmethod
+    def _whisper_runtime_config() -> tuple[str, str, str]:
+        """Choose Faster-Whisper runtime settings from available hardware."""
+        if torch.cuda.is_available():
+            logger.info("CUDA detected; using GPU with float16 and medium model")
+            return "medium", "cuda", "float16"
+        logger.info("No GPU detected; using CPU with int8 and small model")
+        return "small", "cpu", "int8"
+
+    def _warm_up_openai_client(self) -> None:
+        """Initialise the OpenAI fallback client."""
+        if not settings.OPENAI_API_KEY:
+            return
+        try:
+            self.openai_client = openai.AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                timeout=settings.STT_TIMEOUT,
+            )
+            logger.info("OpenAI client initialized")
+        except (openai.OpenAIError, TypeError, ValueError) as exc:
+            logger.warning("Failed to initialize OpenAI client: %s", exc)
+
+    async def _transcribe_with_whisper(self, audio_data: bytes) -> dict[str, Any]:
+        """Transcribe audio using Faster-Whisper."""
         start_time = time.time()
         try:
             if not self.fw_model:
                 raise STTError("Faster-Whisper model not loaded")
+            processed_audio = await self._processed_wav(audio_data)
+            waveform = self._decode_wav_pcm16(processed_audio)
+            segments, info = self.fw_model.transcribe(waveform, beam_size=5)
+            return self._whisper_result(segments, info, start_time)
+        except WHISPER_ERRORS as exc:
+            self._raise_stt_error("_transcribe_with_whisper", start_time, exc)
 
-            # Process audio to standard mono/16k WAV
-            processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
+    async def _processed_wav(self, audio_data: bytes) -> bytes:
+        """Convert incoming audio to standard mono 16 kHz WAV."""
+        return await audio_processor.process_audio_for_stt(audio_data, "wav")
 
-            # Decode WAV -> float32 mono [-1, 1]
-            with wave.open(io.BytesIO(processed_audio), "rb") as w:
-                sr = w.getframerate()
-                ch = w.getnchannels()
-                sw = w.getsampwidth()
-                frames = w.readframes(w.getnframes())
-            if sw != 2:
-                raise ValueError(f"Expected 16-bit WAV, got {sw*8}-bit")
-            arr = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            if ch > 1:
-                arr = arr.reshape(-1, ch).mean(axis=1)
+    @staticmethod
+    def _decode_wav_pcm16(processed_audio: bytes) -> np.ndarray:
+        """Decode mono or stereo 16-bit WAV into float32 samples."""
+        with wave.open(io.BytesIO(processed_audio), "rb") as wav_file:
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            frames = wav_file.readframes(wav_file.getnframes())
+        if sample_width != 2:
+            raise ValueError(f"Expected 16-bit WAV, got {sample_width * 8}-bit")
+        samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+        return samples.reshape(-1, channels).mean(axis=1) if channels > 1 else samples
 
-            # Transcribe with Faster-Whisper (auto-detect language)
-            segments, info = self.fw_model.transcribe(
-                arr,
-                beam_size=5,
-                language=None,  # auto-detect spoken language
-            )
-            text = " ".join(seg.text for seg in segments).strip()
+    def _whisper_result(
+        self, segments: Any, info: Any, start_time: float
+    ) -> dict[str, Any]:
+        """Build a public result payload from Faster-Whisper output."""
+        latency = time.time() - start_time
+        text = " ".join(segment.text for segment in segments).strip()
+        detected_lang = info.language or "en"
+        lang_prob = info.language_probability or 0.0
+        logger.debug(
+            "Faster-Whisper transcription completed in %.3fs (lang=%s, prob=%.2f)",
+            latency,
+            detected_lang,
+            lang_prob,
+        )
+        return self._transcription_payload(
+            text, ModelName.FASTER_WHISPER_SMALL, detected_lang, lang_prob, latency
+        )
 
-            latency = time.time() - start_time
-            detected_lang = info.language or "en"
-            lang_prob = getattr(info, "language_probability", 0.0)
-            logger.debug(
-                f"Faster-Whisper transcription completed in {latency:.3f}s "
-                f"(lang={detected_lang}, prob={lang_prob:.2f})"
-            )
-
-            return {
-                "text": text,
-                "model": ModelName.FASTER_WHISPER_SMALL,
-                "detected_language": detected_lang,
-                "language_probability": lang_prob,
-                "latency": latency,
-                "confidence": 1.0  # FW doesn't return confidence
-            }
-        except Exception as e:
-            latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_transcribe_with_whisper", "latency": latency})
-            raise
-        
-    
-    async def _transcribe_with_openai(self, audio_data: bytes) -> Dict[str, Any]:
+    async def _transcribe_with_openai(self, audio_data: bytes) -> dict[str, Any]:
         """Transcribe audio using OpenAI Whisper."""
         start_time = time.time()
-        
         try:
             if not self.openai_client:
                 raise STTError("OpenAI client not initialized")
-            
-            # Process audio for OpenAI
-            processed_audio = await audio_processor.process_audio_for_stt(audio_data, "wav")
-            
-            # Transcribe using OpenAI
-            file_obj = io.BytesIO(processed_audio)
-            file_obj.name = "audio.wav"  # OpenAI SDK reads filename from file-like
+            response = await self._create_openai_transcription(audio_data)
+            text = (response.text or "").strip()
+            return self._openai_result(text, start_time)
+        except OPENAI_STT_ERRORS as exc:
+            self._raise_stt_error("_transcribe_with_openai", start_time, exc)
 
-            response = await self.openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=file_obj,
-                response_format="json",
-            )
-            
-            transcription = (getattr(response, "text", "") or "").strip()
-            latency = time.time() - start_time
-            
-            logger.debug(f"OpenAI transcription completed in {latency:.3f}s")
-            
-            return {
-                "text": transcription,
-                "model": ModelName.OPENAI_WHISPER,
-                "detected_language": "en",  # OpenAI fallback defaults to English
-                "language_probability": 0.0,
-                "latency": latency,
-                "confidence": 1.0  # OpenAI doesn't provide confidence scores
-            }
-            
-        except Exception as e:
-            latency = time.time() - start_time
-            log_error_with_context(logger, e, {"method": "_transcribe_with_openai", "latency": latency})
-            raise
-    
+    async def _create_openai_transcription(self, audio_data: bytes) -> Any:
+        """Call the OpenAI audio transcription API."""
+        file_obj = io.BytesIO(await self._processed_wav(audio_data))
+        file_obj.name = "audio.wav"
+        return await self.openai_client.audio.transcriptions.create(
+            model=self.fallback_stt_model,
+            file=file_obj,
+            response_format="json",
+            timeout=settings.STT_TIMEOUT,
+        )
+
+    def _openai_result(self, text: str, start_time: float) -> dict[str, Any]:
+        """Build a public result payload from OpenAI output."""
+        latency = time.time() - start_time
+        logger.debug("OpenAI transcription completed in %.3fs", latency)
+        return self._transcription_payload(
+            text, ModelName.OPENAI_WHISPER, "en", 0.0, latency
+        )
+
+    @staticmethod
+    def _transcription_payload(
+        text: str,
+        model: ModelName,
+        detected_language: str,
+        language_probability: float,
+        latency: float,
+    ) -> dict[str, Any]:
+        """Build a transcription result payload."""
+        return {
+            "text": text,
+            "model": model,
+            "detected_language": detected_language,
+            "language_probability": language_probability,
+            "latency": latency,
+            "confidence": 1.0,
+        }
+
+    @staticmethod
+    def _normalize_openai_stt_model(model: str) -> str:
+        """Accept provider-qualified env values like openai/whisper-1."""
+        openai_prefix = "openai/"
+        return model[len(openai_prefix) :] if model.startswith(openai_prefix) else model
+
     @log_performance
-    async def transcribe_audio(self, audio_data: bytes, *, use_fallback: bool = False) -> Dict[str, Any]:
-        """
-        Transcribe audio using primary or fallback STT service.
-        
-        Args:
-            audio_data: Audio data in bytes
-            use_fallback: Whether to use fallback service
-            
-        Returns:
-            Dict with transcription result
-        """
+    async def transcribe_audio(
+        self, audio_data: bytes, *, use_fallback: bool = False
+    ) -> dict[str, Any]:
+        """Transcribe audio using the primary or fallback STT service."""
         start_time = time.time()
-        
+        self.performance_stats["total_transcriptions"] += 1
+        if not use_fallback:
+            result = await self._try_primary_stt(audio_data)
+            if "error" not in result:
+                return result
+        if self.openai_client:
+            return await self._try_fallback_stt(audio_data, start_time)
+        self._update_stats(time.time() - start_time, success=False)
+        return {"error": "No STT services available"}
+
+    async def _try_primary_stt(self, audio_data: bytes) -> dict[str, Any]:
+        """Try Faster-Whisper and return an error marker on failure."""
         try:
-            self.performance_stats["total_transcriptions"] += 1
-            
-            # Try primary service first (unless fallback is explicitly requested)
-            if not use_fallback:# and self.hf_pipeline:
-                try:
-                    result = await self._transcribe_with_whisper(audio_data)
-                    self._update_stats(result["latency"], True)
-                    return result
-                except Exception as e:
-                    logger.warning(f"Primary STT failed, trying fallback: {str(e)}")
-            
-            # Use fallback service
-            if self.openai_client:
-                try:
-                    result = await self._transcribe_with_openai(audio_data)
-                    self._update_stats(result["latency"], True)
-                    return result
-                except Exception as e:
-                    logger.error(f"Fallback STT also failed: {str(e)}")
-                    self._update_stats(time.time() - start_time, False)
-                    return {"error": f"STT failed: {str(e)}"}
-            else:
-                error_msg = "No STT services available"
-                self._update_stats(time.time() - start_time, False)
-                return {"error": error_msg}
-                
-        except Exception as e:
-            latency = time.time() - start_time
-            self._update_stats(latency, False)
-            log_error_with_context(logger, e, {"method": "transcribe_audio", "audio_size": len(audio_data)})
-            return {"error": f"Transcription failed: {str(e)}"}
-    
-    async def transcribe_chunked_audio(self, audio_chunks: List[bytes]) -> str:
-        """
-        Transcribe audio from multiple chunks for streaming support.
-        
-        Args:
-            audio_chunks: List of audio chunk bytes
-            
-        Returns:
-            Combined transcription text
-        """
+            result = await self._transcribe_with_whisper(audio_data)
+            self._update_stats(result["latency"], success=True)
+            return result
+        except STTError as exc:
+            logger.warning("Primary STT failed, trying fallback: %s", exc)
+            return {"error": str(exc)}
+
+    async def _try_fallback_stt(
+        self, audio_data: bytes, start_time: float
+    ) -> dict[str, Any]:
+        """Try OpenAI Whisper and convert failure into an error payload."""
         try:
-            logger.debug(f"Transcribing {len(audio_chunks)} audio chunks")
-            
-            if not audio_chunks:
-                return ""
-            
-            # Combine chunks if they're small
-            if len(audio_chunks) == 1:
-                result = await self.transcribe_audio(audio_chunks[0])
-                return result.get("text", "") if "error" not in result else ""
-            
-            # For multiple chunks, process them efficiently
-            combined_audio = b''.join(audio_chunks)
-            
-            # Use AudioStreamProcessor to optimize chunk processing
-            optimized_chunks = []
-            for chunk in audio_chunks:
-                # Create optimal chunks using AudioStreamProcessor
-                chunk_generator = audio_stream_processor.create_audio_chunks(chunk, chunk_size=1024)
-                optimized_chunk = b''.join(chunk_generator)
-                optimized_chunks.append(optimized_chunk)
-            
-            # Combine optimized chunks
-            final_audio = b''.join(optimized_chunks)
-            
-            # Transcribe combined audio
+            result = await self._transcribe_with_openai(audio_data)
+            self._update_stats(result["latency"], success=True)
+            return result
+        except STTError as exc:
+            self._update_stats(time.time() - start_time, success=False)
+            logger.error("Fallback STT failed: %s", exc)
+            return {"error": f"STT failed: {exc}"}
+
+    async def transcribe_chunked_audio(self, audio_chunks: list[bytes]) -> str:
+        """Transcribe audio from multiple chunks for streaming support."""
+        if not audio_chunks:
+            return ""
+        try:
+            final_audio = self._combine_chunks(audio_chunks)
             result = await self.transcribe_audio(final_audio)
-            
-            if "error" in result:
-                logger.error(f"Chunked transcription failed: {result['error']}")
-                return ""
-            
-            transcription = result["text"]
-            logger.debug(f"Chunked transcription completed: '{transcription[:50]}...'")
-            
-            return transcription
-            
-        except Exception as e:
-            log_error_with_context(logger, e, {"method": "transcribe_chunked_audio", "chunks_count": len(audio_chunks)})
+            return self._text_or_empty(result, "Chunked transcription failed")
+        except (RuntimeError, ValueError) as exc:
+            log_error_with_context(logger, exc, {"method": "transcribe_chunked_audio"})
             return ""
-    
-    async def transcribe_streaming_audio(self, audio_stream: asyncio.StreamReader) -> str:
-        """
-        Transcribe real-time audio stream for ultra-low latency.
-        
-        Args:
-            audio_stream: Async stream reader for audio data
-            
-        Returns:
-            Transcription text
-        """
+
+    @staticmethod
+    def _combine_chunks(audio_chunks: list[bytes]) -> bytes:
+        """Optimise and combine chunk bytes."""
+        if len(audio_chunks) == 1:
+            return audio_chunks[0]
+        optimized_chunks = []
+        for chunk in audio_chunks:
+            chunk_generator = audio_stream_processor.create_audio_chunks(
+                chunk, chunk_size=1024
+            )
+            optimized_chunks.append(b"".join(chunk_generator))
+        return b"".join(optimized_chunks)
+
+    @staticmethod
+    def _text_or_empty(result: dict[str, Any], error_message: str) -> str:
+        """Return text from a result payload or log and return empty text."""
+        if "error" in result:
+            logger.error("%s: %s", error_message, result["error"])
+            return ""
+        transcription = result["text"]
+        logger.debug("Chunked transcription completed: '%s...'", transcription[:50])
+        return transcription
+
+    async def transcribe_streaming_audio(
+        self, audio_stream: asyncio.StreamReader
+    ) -> str:
+        """Transcribe a real-time audio stream."""
         try:
-            logger.debug("Starting streaming audio transcription")
-            
-            # Use AudioStreamProcessor to handle the stream
-            audio_chunks = []
-            async for chunk in audio_stream_processor.process_audio_stream(audio_stream):
-                audio_chunks.append(chunk)
-                
-                # Process in batches for optimal performance
-                if len(audio_chunks) >= STREAMING_BATCH_SIZE:
-                    break
-            
-            if not audio_chunks:
-                return ""
-            
-            # Transcribe accumulated chunks
+            audio_chunks = await self._streaming_batch(audio_stream)
             return await self.transcribe_chunked_audio(audio_chunks)
-            
-        except Exception as e:
-            log_error_with_context(logger, e, {"method": "transcribe_streaming_audio"})
+        except (RuntimeError, ValueError) as exc:
+            log_error_with_context(
+                logger, exc, {"method": "transcribe_streaming_audio"}
+            )
             return ""
-    
-    def _update_stats(self, latency: float, success: bool) -> None:
+
+    @staticmethod
+    async def _streaming_batch(audio_stream: asyncio.StreamReader) -> list[bytes]:
+        """Collect one streaming STT batch."""
+        audio_chunks = []
+        async for chunk in audio_stream_processor.process_audio_stream(audio_stream):
+            audio_chunks.append(chunk)
+            if len(audio_chunks) >= STREAMING_BATCH_SIZE:
+                break
+        return audio_chunks
+
+    def _raise_stt_error(self, method: str, start_time: float, exc: Exception) -> None:
+        """Log and re-raise a domain STT error with context."""
+        log_error_with_context(
+            logger,
+            exc,
+            {"method": method, "latency": time.time() - start_time},
+        )
+        raise STTError(f"{method} failed") from exc
+
+    def _update_stats(self, latency: float, *, success: bool) -> None:
         """Update performance statistics."""
         self.performance_stats["latencies"].append(latency)
-        
-        if success:
-            self.performance_stats["successful_transcriptions"] += 1
-        else:
-            self.performance_stats["failed_transcriptions"] += 1
-        
-        # Keep only last 100 latencies
-        if len(self.performance_stats["latencies"]) > LATENCY_WINDOW_SIZE:
-            self.performance_stats["latencies"] = self.performance_stats["latencies"][-LATENCY_WINDOW_SIZE:]
-        
-        # Update average latency
-        if self.performance_stats["latencies"]:
-            self.performance_stats["avg_latency"] = sum(self.performance_stats["latencies"]) / len(self.performance_stats["latencies"])
-    
-    def get_performance_stats(self) -> Dict[str, Any]:
+        key = "successful_transcriptions" if success else "failed_transcriptions"
+        self.performance_stats[key] += 1
+        self._trim_latency_window()
+        self._refresh_average_latency()
+
+    def _trim_latency_window(self) -> None:
+        """Keep only the recent latency window."""
+        if len(self.performance_stats["latencies"]) <= LATENCY_WINDOW_SIZE:
+            return
+        self.performance_stats["latencies"] = self.performance_stats["latencies"][
+            -LATENCY_WINDOW_SIZE:
+        ]
+
+    def _refresh_average_latency(self) -> None:
+        """Refresh the rolling average latency."""
+        latencies = self.performance_stats["latencies"]
+        if latencies:
+            self.performance_stats["avg_latency"] = sum(latencies) / len(latencies)
+
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics."""
         return {
             "total_transcriptions": self.performance_stats["total_transcriptions"],
-            "successful_transcriptions": self.performance_stats["successful_transcriptions"],
+            "successful_transcriptions": self.performance_stats[
+                "successful_transcriptions"
+            ],
             "failed_transcriptions": self.performance_stats["failed_transcriptions"],
             "avg_latency": self.performance_stats["avg_latency"],
             "models_warmed_up": self.models_warmed_up,
-            "primary_model": ModelName.FASTER_WHISPER_SMALL if self.hf_pipeline else ModelName.NONE,
-            "fallback_model": ModelName.OPENAI_WHISPER if self.openai_client else ModelName.NONE
+            "primary_model": self._primary_model_name(),
+            "fallback_model": self._fallback_model_name(),
         }
 
+    def _primary_model_name(self) -> ModelName:
+        """Return the active primary model identifier."""
+        return ModelName.FASTER_WHISPER_SMALL if self.fw_model else ModelName.NONE
 
-# Global service instance
-stt_service = STTService() 
+    def _fallback_model_name(self) -> ModelName:
+        """Return the active fallback model identifier."""
+        return ModelName.OPENAI_WHISPER if self.openai_client else ModelName.NONE
+
+
+stt_service = STTService()

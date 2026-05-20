@@ -82,7 +82,7 @@ export function HeroSection() {
                     {/* Social links */}
                     <div className="mt-6 flex items-center justify-center gap-5">
                         <a
-                            href="https://ateetai.vercel.app/"
+                            href="https://ateet.masxai.com"
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Portfolio"

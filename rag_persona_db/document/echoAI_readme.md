@@ -27,6 +27,10 @@
 - [RAG Pipeline Flow Diagram](#-rag-pipeline-flow-diagram)
 - [Agent Collaboration Workflow](#-agent-collaboration-workflow)
 - [Service Layer Architecture](#-service-layer-architecture)
+- [Design Patterns](#-design-patterns)
+- [Frontend Architecture](#-frontend-architecture)
+- [Exception Hierarchy](#-exception-hierarchy)
+- [WebSocket Protocol Diagram](#-websocket-protocol-diagram)
 - [Technology Stack](#-technology-stack)
 - [Project Structure](#-project-structure)
 - [How It Works](#-how-it-works)
@@ -71,7 +75,7 @@ This project pushes the boundaries of what's possible in human-AI communication,
 - **Multi-mode audio input**: complete audio, streaming chunks, and real-time buffered streams
 
 ### 🧠 RAG-Powered Intelligence
-- **Semantic vector search** using ChromaDB with cosine similarity (HNSW space)
+- **Semantic vector search** using Supabase pgvector with cosine similarity (IVFFlat index)
 - **Self-Info Knowledge Base** loaded and indexed from `self_info.json` (career, skills, projects, personality)
 - **Reply Cache System** with dual-layer matching: MD5 hash exact match → semantic similarity fallback
 - **Context-aware responses** with multi-turn conversation history (configurable window size)
@@ -88,7 +92,7 @@ This project pushes the boundaries of what's possible in human-AI communication,
 ### ⚡ Performance Optimizations
 - **WebSocket streaming** for real-time bidirectional audio transmission
 - **Concurrent async processing** with `asyncio`-based architecture throughout
-- **Multi-level caching**: in-memory LRU cache → SQLite audio cache → ChromaDB vector cache
+- **Multi-level caching**: in-memory LRU cache → Supabase audio cache → pgvector semantic cache
 - **Cache warm-up** on startup with common phrases
 - **Performance monitoring** with per-component latency tracking and statistics
 - **Configurable timeouts** for STT (5s), LLM (10s), TTS (8s)
@@ -97,19 +101,21 @@ This project pushes the boundaries of what's possible in human-AI communication,
 - **Typed exception hierarchy**: `EchoAIError` → `STTError`, `LLMError`, `TTSError`, `RAGError`, `PipelineError`, `DatabaseError`, `AudioProcessingError`
 - **Automatic LLM fallback** from DeepSeek → Mistral on failure
 - **Automatic STT fallback** from Faster-Whisper → OpenAI Whisper on failure
-- **MockVectorStore** fallback when ChromaDB initialization fails
+- **MockVectorStore** fallback when pgvector initialization fails
 - **Connection management** with graceful WebSocket disconnect/cleanup
 
-### 💾 Dual Database Architecture
-- **SQLite** for local audio cache and reply metadata (zero-config, always available)
-- **Supabase PostgreSQL** for cloud-based persistent storage with connection pooling (`asyncpg`)
-- **ChromaDB** as vector database for semantic search (persisted to disk)
+### 💾 Cloud Database Architecture
+- **Supabase PostgreSQL** for all persistent storage with connection pooling (`asyncpg`)
+- **pgvector** extension for 384-dim vector similarity search (IVFFlat indexes)
+- **Supabase Storage** for audio file hosting (TTS cache, session recordings)
 
-### 🖥️ Frontend Web Client
-- **Single-page HTML/JS application** served directly by FastAPI
+### 🖥️ Frontend Web Client (Next.js 16)
+- **Next.js 16 + React 19 + TypeScript 5** — modern App Router with server/client components
+- **Tailwind CSS 4** — utility-first responsive styling with glassmorphism and micro-animations
+- **12 TSX components** across 3 domains: Chat (ChatContainer, ChatInput, MessageBubble, TypingIndicator), Home (HeroSection, FeaturesSection, StatsBar, AIVisualization, NeuralBackground), Layout (Header, Footer, LayoutShell)
+- **Custom `useChat` hook** — encapsulates WebSocket lifecycle, message state, audio recording/playback, and voice toggle
 - **Real-time WebSocket** communication with visual status indicators
-- **Audio recording & playback** with streaming support
-- **Text chat** as an alternative input mode
+- **Responsive design** — optimised for mobile (320px–768px), tablet (768px–1024px), and desktop
 
 ---
 
@@ -149,7 +155,7 @@ flowchart TD
     R --> S[Client Audio Output]
     
     subgraph "RAG Memory Layer"
-        T[ChromaDB Vector Store]
+        T[pgvector Store]
         U[Reply Cache Database]
         V[Self-Info Knowledge Base]
         W[Conversation History]
@@ -196,10 +202,10 @@ flowchart LR
     end
 
     subgraph "Data Layer"
-        D1[DBOperations - SQLite]
-        D2[DBOperationsPostgres - Supabase]
-        D3[ChromaDB Facts Index]
-        D4[ChromaDB Evidence Index]
+        D1[DBOperations - Supabase Postgres]
+        D2[Supabase Storage]
+        D3[pgvector Facts Index]
+        D4[pgvector Evidence Index]
         D5[Self-Info JSON]
         D6[rag_persona_db/]
     end
@@ -288,8 +294,8 @@ flowchart TD
         HIT --> WS[WebSocket Response]
         CAUDIO --> WS
         NAUDIO --> WS
-        STORE --> SQLITE[(SQLite DB)]
-        STORE --> CHROMA[(ChromaDB)]
+        STORE --> SUPA[(Supabase Postgres)]
+        STORE --> STORAGE[(Supabase Storage)]
     end
 ```
 
@@ -300,23 +306,23 @@ flowchart TD
 ### Core RAG Components
 
 #### 1. Semantic Vector Search
-- **Embedding Model**: `SentenceTransformer` (`all-MiniLM-L6-v2`)
-- **Vector Database**: ChromaDB with `hnsw:space = cosine`
+- **Embedding Model**: `all-MiniLM-L6-v2` (384-dim, via `transformers` AutoModel)
+- **Vector Database**: Supabase pgvector with IVFFlat cosine indexes
 - **Search Strategy**: Hybrid — vector similarity + BM25 keyword matching with configurable `k`
-- **Collections**:
-  - `echoai_reply_cache` — reply caching for fast audio reuse
-  - `echoai_self_info_facts` — atomic Q&A records from `self_info.json`
-  - `echoai_self_info_evidence` — chunked evidence documents (READMEs, CV, LinkedIn CSVs)
+- **Tables**:
+  - `documents_reply_cache` — reply caching for fast audio reuse
+  - `documents_self_info_facts` — atomic Q&A records from `self_info.json`
+  - `documents_self_info_evidence` — chunked evidence documents (READMEs, CV, LinkedIn CSVs)
 - **Performance**: Sub-50ms similarity search latency
 
 #### 2. Dual-Index Knowledge Base Architecture
 
-The knowledge base uses a **dual-index** strategy with separate Chroma collections:
+The knowledge base uses a **dual-index** strategy with separate pgvector tables:
 
-| Index | Collection | Source | Chunking |
+| Index | Table | Source | Chunking |
 |-------|-----------|--------|----------|
-| **Facts** | `echoai_self_info_facts` | `self_info.json` — atomic Q&A records | One document per Q&A pair |
-| **Evidence** | `echoai_self_info_evidence` | READMEs, CV, LinkedIn CSVs | Header-aware (MD: 1000/150), paragraph (DOCX: 800/100), row-based (CSV) |
+| **Facts** | `documents_self_info_facts` | `self_info.json` — atomic Q&A records | One document per Q&A pair |
+| **Evidence** | `documents_self_info_evidence` | READMEs, CV, LinkedIn CSVs | Header-aware (MD: 1000/150), paragraph (DOCX: 800/100), row-based (CSV) |
 
 **Self-Info JSON Schema** — The facts index is loaded from a structured `self_info.json` file containing:
 - Personal information & professional bio
@@ -351,7 +357,7 @@ The router scores each category via regex pattern lists and selects primary + se
 #### 4. Hybrid Retrieval
 
 The `SelfInfoRetriever` combines two search strategies:
-1. **Vector similarity search** — cosine similarity via ChromaDB (`k=4` default)
+1. **Vector similarity search** — cosine similarity via pgvector (`k=4` default)
 2. **BM25 keyword search** — exact keyword matching over the same document collection
 
 Results are merged with vector-first ordering, deduplicated by `stable_id`, and post-filtered by `doc_type` and `tags` metadata. If filtering reduces results below `k`, an expanded search is triggered.
@@ -381,8 +387,8 @@ flowchart TD
     end
 
     subgraph "Dual-Index Vector Store"
-        FACTS_IDX[("ChromaDB Facts")]
-        EVIDENCE_IDX[("ChromaDB Evidence")]
+        FACTS_IDX[("pgvector Facts")]
+        EVIDENCE_IDX[("pgvector Evidence")]
     end
 
     subgraph "Query Processing"
@@ -400,10 +406,10 @@ flowchart TD
 #### 6. Reply Caching System
 - **Dual-layer lookup**:
   - **Hash-based**: MD5 hash for exact text match (O(1) lookup via SQLite)
-  - **Semantic search**: Cosine similarity ≥ 85% threshold via ChromaDB
-- **Storage**: SQLite `reply_cache` table + ChromaDB `echoai_reply_cache` vector embeddings
-- **Deterministic IDs**: `MD5(user_text)` used for both SQLite and Chroma `vector_id` to enable clean upserts
-- **Audio file reuse**: Cached audio files are stored on disk and referenced by path
+  - **Semantic search**: Cosine similarity ≥ 85% threshold via pgvector
+- **Storage**: Supabase `reply_cache` table + pgvector `documents_reply_cache` vector embeddings
+- **Deterministic IDs**: `MD5(user_text)` used for both DB and vector `stable_id` to enable clean upserts
+- **Audio file reuse**: Cached audio files stored in Supabase Storage and referenced by path
 
 ### Multi-Level Caching Strategy
 
@@ -421,7 +427,7 @@ flowchart TD
         L2{"MD5 Hash Lookup (SQLite)"}
         L2 -->|Exact Match| L2_HIT["Cached Response + Audio"]
         L2 -->|Miss| L3
-        L3{"Semantic Search (ChromaDB ≥95%)"}
+        L3{"Semantic Search (pgvector ≥95%)"}
         L3 -->|Hit| L3_HIT["Similar Response + Audio"]
         L3 -->|Miss| KB
     end
@@ -531,25 +537,290 @@ sequenceDiagram
 
 ---
 
+## 🧩 Design Patterns
+
+EchoAI employs several well-known software design patterns to achieve modularity, resilience, and performance.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/design_patterns.mmd`](docs/diagrams/design_patterns.mmd)
+
+| Pattern | Implementation | Purpose |
+|---------|---------------|---------|
+| **Pipeline** | `VoicePipeline` | Chains STT → RAG → LLM → TTS as sequential stages; each stage is independently replaceable |
+| **Strategy** | `STTService`, `LLMService` | Runtime selection between primary (Faster-Whisper / DeepSeek) and fallback (OpenAI Whisper / Mistral) providers — swap without changing callers |
+| **Repository** | `DBOperations`, `SelfInfoVectorStore` | Abstracts storage behind a uniform interface (Supabase PostgreSQL + pgvector) |
+| **Facade** | `SelfInfoRAG` | Exposes a single `query()` entrypoint that internally orchestrates `QueryRouter`, `SelfInfoRetriever`, `SelfInfoVectorStore`, and `EvidenceLoader` |
+| **Observer** | `ConnectionManager` | Manages N WebSocket connections; broadcasts events and handles per-session lifecycle |
+| **Cache-Aside** | `ReplyCacheManager`, `TTSService` | Four-level cache hierarchy (In-Memory LRU → MD5 Hash → Semantic → TTS Disk) each checked before computation |
+| **Chain of Responsibility** | `QueryRouter` | Classifies queries into `factual`, `evidence`, `timeline`, or `default` routes — each handler tries its index before forwarding |
+| **Template Method** | `EchoAIError` hierarchy | Base exception defines the contract; `STTError`, `LLMError`, `TTSError`, etc. specialise the error type |
+
+```mermaid
+flowchart LR
+    subgraph "Pipeline Pattern"
+        PP1["VoicePipeline"]
+        PP2["STT → RAG → LLM → TTS"]
+        PP1 --> PP2
+    end
+
+    subgraph "Strategy Pattern"
+        SP1["STT Strategy"]
+        SP2["Faster-Whisper"]
+        SP3["OpenAI Whisper"]
+        SP4["LLM Strategy"]
+        SP5["DeepSeek AI"]
+        SP6["Mistral AI"]
+        SP1 --> SP2 & SP3
+        SP4 --> SP5 & SP6
+    end
+
+    subgraph "Facade Pattern"
+        FP1["SelfInfoRAG"]
+        FP2["QueryRouter"]
+        FP3["SelfInfoRetriever"]
+        FP4["SelfInfoVectorStore"]
+        FP5["EvidenceLoader"]
+        FP1 --> FP2 & FP3 & FP4 & FP5
+    end
+
+    subgraph "Cache-Aside Pattern"
+        CP1["L1: In-Memory LRU"]
+        CP2["L2: MD5 Hash — SQLite"]
+        CP3["L3: Semantic — pgvector"]
+        CP4["L4: TTS Audio Disk"]
+        CP1 --> CP2 --> CP3 --> CP4
+    end
+
+    subgraph "Chain of Responsibility"
+        CR1["QueryRouter"]
+        CR2["Factual → Facts Index"]
+        CR3["Evidence → Evidence Index"]
+        CR4["Timeline → Both Indices"]
+        CR1 --> CR2 & CR3 & CR4
+    end
+```
+
+---
+
+## 🌐 Frontend Architecture
+
+The frontend is a **Next.js 16** application using the **App Router**, **React 19**, **TypeScript 5**, and **Tailwind CSS 4**. All real-time communication flows through a custom `useChat` hook that manages WebSocket lifecycle, message state, and audio recording/playback.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/frontend_architecture.mmd`](docs/diagrams/frontend_architecture.mmd)
+
+### Component Hierarchy
+
+```mermaid
+flowchart TD
+    subgraph "Next.js App Router"
+        LAYOUT["layout.tsx — RootLayout"]
+        SHELL["LayoutShell — Header + Footer wrapper"]
+        HOME_PAGE["page.tsx — Landing Page"]
+        CHAT_PAGE["chat/page.tsx — Chat Page"]
+        ERROR["error.tsx — Error Boundary"]
+    end
+
+    subgraph "Landing Page Components"
+        HERO["HeroSection — CTA + Animated text"]
+        FEATURES["FeaturesSection — Feature cards grid"]
+        STATS["StatsBar — Live statistics counters"]
+        NEURAL["NeuralBackground — Canvas particle animation"]
+        AIVIZ["AIVisualization — 3D-style AI visual"]
+    end
+
+    subgraph "Chat Components"
+        CONTAINER["ChatContainer — Main chat orchestrator"]
+        INPUT["ChatInput — Text + voice input bar"]
+        BUBBLE["MessageBubble — User/AI message display"]
+        TYPING["TypingIndicator — AI thinking animation"]
+    end
+
+    subgraph "Shared Layout"
+        HEADER["Header — Navigation + branding"]
+        FOOTER["Footer — Links + credits"]
+    end
+
+    subgraph "Data Layer"
+        HOOK["useChat Hook — WebSocket + state management"]
+        API_LIB["lib/api.ts — API base URL config"]
+        TYPES["lib/types.ts — TypeScript interfaces"]
+    end
+
+    subgraph "Backend Connection"
+        WS["WebSocket ws://host:8000/ws/{sessionId}"]
+        REST["REST API http://host:8000/api/*"]
+    end
+
+    LAYOUT --> SHELL
+    SHELL --> HEADER & FOOTER
+    LAYOUT --> HOME_PAGE & CHAT_PAGE & ERROR
+
+    HOME_PAGE --> HERO & FEATURES & STATS
+    HOME_PAGE --> NEURAL & AIVIZ
+
+    CHAT_PAGE --> CONTAINER
+    CONTAINER --> INPUT & BUBBLE & TYPING
+    CONTAINER --> HOOK
+
+    HOOK --> WS
+    HOOK --> API_LIB
+    HOOK --> TYPES
+    API_LIB --> REST
+```
+
+### Frontend Technology Stack
+
+| Layer | Technology | Details |
+|-------|-----------|---------|
+| **Framework** | Next.js 16.1.6 | App Router with server/client components |
+| **Rendering** | React 19.2.3 | Concurrent features, server components |
+| **Language** | TypeScript 5 | Full type safety across components |
+| **Styling** | Tailwind CSS 4 | Utility-first with glassmorphism effects |
+| **State** | `useChat` custom hook | WebSocket, messages, audio, voice toggle |
+| **Build** | PostCSS + SWC | Lightning-fast compilation |
+| **Linting** | ESLint 9 (flat config) | `eslint-config-next` rule set |
+
+---
+
+## 🚨 Exception Hierarchy
+
+All service, agent, and pipeline code raises typed exceptions from a single hierarchy rooted in `EchoAIError`. Callers catch specific subtypes to implement fallback behaviour.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/exception_hierarchy.mmd`](docs/diagrams/exception_hierarchy.mmd)
+
+```mermaid
+classDiagram
+    class EchoAIError {
+        <<Base Exception>>
+        Base exception for all EchoAI errors
+    }
+
+    class STTError {
+        Speech-to-Text processing failure
+    }
+
+    class LLMError {
+        Language-model generation failure
+    }
+
+    class TTSError {
+        Text-to-Speech synthesis failure
+    }
+
+    class RAGError {
+        RAG retrieval or agent failure
+    }
+
+    class PipelineError {
+        Voice-pipeline orchestration failure
+    }
+
+    class DatabaseError {
+        Database operation failure
+    }
+
+    class AudioProcessingError {
+        Audio conversion / processing failure
+    }
+
+    EchoAIError <|-- STTError
+    EchoAIError <|-- LLMError
+    EchoAIError <|-- TTSError
+    EchoAIError <|-- RAGError
+    EchoAIError <|-- PipelineError
+    EchoAIError <|-- DatabaseError
+    EchoAIError <|-- AudioProcessingError
+```
+
+---
+
+## 📡 WebSocket Protocol Diagram
+
+Visual diagram of the full WebSocket message lifecycle — connection, audio modes, text chat, and keep-alive.
+
+> 📁 **Standalone diagram:** [`docs/diagrams/websocket_protocol.mmd`](docs/diagrams/websocket_protocol.mmd)
+
+```mermaid
+sequenceDiagram
+    participant Client as Web Client
+    participant WS as WebSocket Server
+    participant CM as ConnectionManager
+    participant VP as VoicePipeline
+    participant RAG as RAG Agent
+
+    Note over Client,RAG: Connection Lifecycle
+
+    Client->>WS: Connect ws://host:8000/ws/{session_id}
+    WS->>CM: connect(websocket, session_id)
+    CM-->>Client: {"type": "connection", "status": "connected"}
+
+    Note over Client,RAG: Complete Audio Mode
+
+    Client->>WS: {"type": "audio", "data": "base64..."}
+    WS->>VP: process_voice_input(audio_data)
+    VP->>VP: STT → Text
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Streaming Audio Mode
+
+    Client->>WS: {"type": "start_streaming"}
+    WS->>CM: set_streaming_status(true)
+    WS-->>Client: {"type": "streaming_started"}
+
+    loop Audio Chunks
+        Client->>WS: {"type": "audio_chunk", "data": "base64..."}
+        WS->>CM: add_audio_chunk(session_id, chunk)
+        WS-->>Client: {"type": "chunk_received"}
+    end
+
+    Client->>WS: {"type": "stop_streaming"}
+    WS->>CM: get_audio_buffer(session_id)
+    WS->>VP: process_streaming_voice(chunks)
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Text Chat Mode
+
+    Client->>WS: {"type": "text", "text": "Hello"}
+    WS->>VP: process_text_input(text)
+    VP->>RAG: process_query(text)
+    RAG-->>VP: response + audio
+    VP-->>WS: PipelineResult
+    WS-->>Client: {"type": "response", "audio": "base64...", "text": "..."}
+
+    Note over Client,RAG: Keep-Alive
+
+    Client->>WS: {"type": "ping"}
+    WS-->>Client: {"type": "pong"}
+```
+
+---
+
 ## 🧰 Technology Stack
 
 | Category | Technology | Purpose |
 |----------|-----------|---------|
+| **Frontend Framework** | Next.js 16.1.6 (App Router) | React-based SSR/SSG framework |
+| **UI Library** | React 19.2.3 + React DOM | Component-based UI rendering |
+| **Language (Frontend)** | TypeScript 5 | Static typing for frontend code |
+| **Styling** | Tailwind CSS 4 | Utility-first CSS framework |
 | **Web Framework** | FastAPI 0.104+ | REST API + WebSocket server |
 | **Primary LLM** | DeepSeek AI (`deepseek-chat`) | Main language model for response generation |
 | **Fallback LLM** | Mistral AI (`mistral-large-latest`) | Fallback language model |
 | **RAG Framework** | LangChain 0.3+ | RAG pipeline, chains, and retrieval |
-| **Vector Database** | ChromaDB 0.4+ | Semantic vector storage and similarity search |
-| **Embeddings** | SentenceTransformers (`all-MiniLM-L6-v2`) | Text embedding generation |
+| **Vector Database** | Supabase pgvector | Semantic vector storage and similarity search |
+| **Embeddings** | `all-MiniLM-L6-v2` (384-dim, via `transformers`) | Text embedding generation |
 | **STT (Primary)** | Faster-Whisper (`small` model) | Local speech-to-text |
 | **STT (Fallback)** | OpenAI Whisper API | Cloud STT fallback |
 | **TTS** | Edge-TTS (Microsoft Neural Voices) | Free text-to-speech synthesis |
-| **Local Database** | SQLite | Audio cache and reply metadata |
-| **Cloud Database** | Supabase PostgreSQL (`asyncpg`) | Cloud-based persistent storage |
+| **Cloud Database** | Supabase PostgreSQL (`asyncpg`) | Persistent storage + vector search |
 | **ML Framework** | PyTorch + Transformers | Model loading and inference |
 | **Audio Processing** | soundfile, imageio-ffmpeg, av | Audio I/O, format conversion |
 | **Config** | Pydantic Settings + python-dotenv | Typed settings from `.env` |
 | **HTTP** | aiohttp, httpx | Async HTTP client calls |
+| **Linting** | ESLint 9 + eslint-config-next | Frontend code quality |
 | **Containerization** | Docker | Production deployment |
 
 ---
@@ -565,7 +836,7 @@ EchoAI/
 ├── run_dev.py                           # Development startup script
 ├── main_debug_no_ws.py                  # Debug mode without WebSocket
 │
-├── src/                                 # Source code root
+├── src/                                 # Backend source code root
 │   ├── __init__.py                      # Package init (version, author)
 │   ├── constants.py                     # Enums & numeric thresholds
 │   ├── exceptions.py                    # Typed exception hierarchy
@@ -584,14 +855,15 @@ EchoAI/
 │   │
 │   ├── agents/                          # Agent layer
 │   │   ├── __init__.py
-│   │   └── langchain_rag_agent.py       # LangChain RAG agent, reply cache manager
+│   │   ├── langchain_rag_agent.py       # LangChain RAG agent, reply cache manager
+│   │   └── query_expansions.py         # Query expansion synonym lists
 │   │
 │   ├── knowledge/                       # ⭐ Self-Info RAG knowledge layer
 │   │   ├── __init__.py
 │   │   ├── query_router.py              # Deterministic query router (no LLM)
 │   │   ├── self_info_rag.py             # Grounded RAG answer chain (temp=0)
 │   │   ├── self_info_retriever.py       # Hybrid retriever (vector + BM25)
-│   │   ├── self_info_vectorstore.py     # Dual-index Chroma store manager
+│   │   ├── self_info_vectorstore.py     # Dual-index pgvector store manager
 │   │   ├── self_info_loader.py          # JSON loader with Pydantic validation
 │   │   ├── self_info_schema.py          # Pydantic v2 schema for Q&A records
 │   │   ├── self_info_documents.py       # SelfInfoItem → LangChain Document
@@ -599,11 +871,7 @@ EchoAI/
 │   │
 │   ├── db/                              # Data layer
 │   │   ├── __init__.py
-│   │   ├── db_operations.py             # SQLite operations (audio cache)
-│   │   ├── db_operations_postgres.py    # Supabase PostgreSQL operations
-│   │   ├── audio_cache.db               # SQLite database file
-│   │   ├── chroma_db/                   # ChromaDB persistent vector store (reply cache)
-│   │   └── self_info_knowledge/         # Self-info dual-index (facts + evidence)
+│   │   └── db_operations.py             # Supabase PostgreSQL + Storage operations
 │   │
 │   ├── documents/                       # Knowledge source data
 │   │   └── self_info.json               # Personal/professional knowledge base (~90KB)
@@ -622,9 +890,46 @@ EchoAI/
 │           ├── audio_stream_processor.py # Real-time stream processing
 │           └── audio_utils.py           # Shared audio helpers
 │
-├── frontend/                            # Web client
-│   ├── index.html                       # Single-page UI (22KB)
-│   └── script.js                        # WebSocket client logic (32KB)
+├── frontend/                            # 🌐 Next.js 16 Web Client
+│   ├── package.json                     # Dependencies (Next 16, React 19, Tailwind 4)
+│   ├── tsconfig.json                    # TypeScript configuration
+│   ├── next.config.ts                   # Next.js configuration
+│   ├── postcss.config.mjs               # PostCSS + Tailwind CSS config
+│   ├── eslint.config.mjs                # ESLint 9 flat config
+│   │
+│   ├── app/                             # Next.js App Router pages
+│   │   ├── layout.tsx                   # Root layout (HTML, fonts, metadata)
+│   │   ├── page.tsx                     # Landing page (/)
+│   │   ├── globals.css                  # Global styles & Tailwind directives
+│   │   ├── error.tsx                    # Error boundary component
+│   │   └── chat/
+│   │       └── page.tsx                 # Chat page (/chat)
+│   │
+│   ├── components/                      # React components
+│   │   ├── chat/                        # Chat UI components
+│   │   │   ├── ChatContainer.tsx        # Main chat orchestrator
+│   │   │   ├── ChatInput.tsx            # Text & voice input bar
+│   │   │   ├── MessageBubble.tsx        # User/AI message display
+│   │   │   └── TypingIndicator.tsx      # AI thinking animation
+│   │   ├── home/                        # Landing page components
+│   │   │   ├── HeroSection.tsx          # CTA + animated headline
+│   │   │   ├── FeaturesSection.tsx      # Feature cards grid
+│   │   │   ├── StatsBar.tsx             # Live statistics counters
+│   │   │   ├── AIVisualization.tsx       # 3D-style AI visual
+│   │   │   └── NeuralBackground.tsx     # Canvas particle animation
+│   │   └── layout/                      # Shared layout components
+│   │       ├── Header.tsx               # Navigation + branding
+│   │       ├── Footer.tsx               # Links + credits
+│   │       └── LayoutShell.tsx          # Header + Footer wrapper
+│   │
+│   ├── hooks/                           # Custom React hooks
+│   │   └── useChat.ts                   # WebSocket + chat state management
+│   │
+│   ├── lib/                             # Shared utilities
+│   │   ├── api.ts                       # API base URL configuration
+│   │   └── types.ts                     # TypeScript interfaces
+│   │
+│   └── public/                          # Static assets
 │
 ├── tests/                               # Unit & smoke tests
 │   ├── test_self_info_loader.py          # SelfInfoLoader validation tests
@@ -640,7 +945,9 @@ EchoAI/
 │   ├── agent_collaboration.mmd           # Agent collaboration workflow
 │   ├── websocket_protocol.mmd           # WebSocket message protocol
 │   ├── caching_strategy.mmd             # Multi-level caching strategy
-│   └── exception_hierarchy.mmd          # Exception class hierarchy
+│   ├── exception_hierarchy.mmd          # Exception class hierarchy
+│   ├── frontend_architecture.mmd        # Next.js component hierarchy
+│   └── design_patterns.mmd              # Design patterns overview
 │
 ├── audio_cache/                         # Cached TTS audio files (*.mp3)
 │
@@ -671,10 +978,10 @@ EchoAI/
 ### 2. RAG-Powered Semantic Search
 **Text query → Vector embedding → Cache lookup → Knowledge retrieval → Context assembly**
 
-- **Step 1 — Reply Cache**: Check for exact hash match or semantic similarity ≥ 95% in ChromaDB
-- **Step 2 — Self-Info Search**: Query the `echoai_self_info` collection for relevant knowledge (top-5 docs)
+- **Step 1 — Reply Cache**: Check for exact hash match or semantic similarity ≥ 95% in pgvector
+- **Step 2 — Self-Info Search**: Query the pgvector `documents_self_info_facts` table for relevant knowledge (top-5 docs)
 - **Step 3 — Context Assembly**: Combine retrieved documents + conversation history into the prompt
-- Multi-level caching hierarchy: in-memory dict → SQLite → ChromaDB vector store
+- Multi-level caching hierarchy: in-memory dict → Supabase reply cache → pgvector semantic store
 
 ### 3. Intelligent Response Generation
 **Context + query → LangChain RAG Chain → LLM reasoning → Response text**
@@ -915,7 +1222,7 @@ python -m src.services.stt_service
 **User Input:** *"Tell me about your experience with AI engineering"*
 
 **RAG Process:**
-1. **Self-Info Search**: Query ChromaDB `echoai_self_info` collection
+1. **Self-Info Search**: Query pgvector `documents_self_info_facts` table
 2. **Context Assembly**: Combine career data, project history, and skills
 3. **Personalized Response**: Generate response in Ateet's authentic voice using persona prompt
 
@@ -966,7 +1273,7 @@ Send a `text` type message over WebSocket (or use the frontend text input) to by
 | `ModelName` | `deepseek_ai`, `mistral_ai`, `openai_gpt4o_mini`, `edge_tts`, `faster_whisper_small`, `openai_whisper`, `langchain_rag_agent`, etc. | Model identifiers |
 | `ChatRole` | `user`, `assistant`, `system` | Conversation roles |
 | `KnowledgeType` | `self_info`, `reply_cache`, `cv_profile` | Knowledge category tags |
-| `ChromaCollection` | `echoai_reply_cache`, `echoai_self_info` | ChromaDB collection names |
+| `PgvectorTable` | `documents_reply_cache`, `documents_self_info_facts`, `documents_self_info_evidence` | pgvector table names |
 
 ---
 
@@ -1004,11 +1311,11 @@ Send a `text` type message over WebSocket (or use the frontend text input) to by
 
 **Vector Search Not Working**
 ```bash
-# Verify ChromaDB
-python -c "from src.agents.langchain_rag_agent import rag_agent; print(rag_agent.vector_store)"
+# Verify pgvector connection
+python -c "from src.knowledge.self_info_vectorstore import _get_supabase_client; print(_get_supabase_client())"
 
 # Verify embeddings model
-python -c "from sentence_transformers import SentenceTransformer; model = SentenceTransformer('all-MiniLM-L6-v2')"
+python -c "from src.knowledge.self_info_vectorstore import _get_embeddings; e = _get_embeddings(); print(len(e.embed_query('test')))"
 ```
 
 **Knowledge Base Empty**
@@ -1022,11 +1329,8 @@ python -c "from src.agents.langchain_rag_agent import rag_agent; print('KB:', ra
 
 **Cache Not Working**
 ```bash
-# Check SQLite database
-sqlite3 src/db/audio_cache.db ".tables"
-
-# Count cached entries
-sqlite3 src/db/audio_cache.db "SELECT COUNT(*) FROM reply_cache;"
+# Check Supabase reply cache
+python -c "from src.db.db_operations import DBOperations; import asyncio; db = DBOperations(); asyncio.run(db.initialize()); print('DB OK')"
 ```
 
 ### Audio Issues
@@ -1146,12 +1450,11 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 - **[DeepSeek AI](https://deepseek.com)** for primary LLM capabilities
 - **[Microsoft Edge-TTS](https://github.com/rany2/edge-tts)** for free neural voice synthesis
 - **[LangChain](https://langchain.com)** for RAG framework and retrieval chains
-- **[ChromaDB](https://www.trychroma.com)** for vector database technology
+- **[Supabase](https://supabase.com)** for PostgreSQL cloud database and pgvector
 - **[Mistral AI](https://mistral.ai)** for fallback LLM capabilities
 - **[OpenAI](https://openai.com)** for Whisper STT and GPT models
 - **[FastAPI](https://fastapi.tiangolo.com)** for the excellent async web framework
-- **[Hugging Face](https://huggingface.co)** for Transformers and SentenceTransformers
-- **[Supabase](https://supabase.com)** for PostgreSQL cloud database
+- **[Hugging Face](https://huggingface.co)** for Transformers and embedding models
 - **Open Source Community** for inspiration and contributions
 
 ---

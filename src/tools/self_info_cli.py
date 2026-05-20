@@ -23,6 +23,7 @@ def _ensure_env():
         sys.path.insert(0, project_root)
 
     from dotenv import load_dotenv
+
     load_dotenv()
 
 
@@ -37,15 +38,11 @@ def cmd_build(args: argparse.Namespace) -> None:
     from src.knowledge.self_info_vectorstore import build_or_update_self_info_store
 
     print("Building self-info vector store...")
-    stores = build_or_update_self_info_store()
+    build_or_update_self_info_store()
 
-    facts_count = stores.facts._collection.count()
-    evidence_count = stores.evidence._collection.count()
-
-    print(f"\n✅ Build complete:")
-    print(f"   Facts index:    {facts_count} documents")
-    print(f"   Evidence index: {evidence_count} documents")
-    print(f"   Persist dir:    {os.environ.get('SELF_INFO_CHROMA_DIR', 'src/db/self_info_knowledge')}")
+    print("\n✅ Build complete:")
+    print("   Facts store:    ready (Supabase pgvector)")
+    print("   Evidence store: ready (Supabase pgvector)")
 
 
 def cmd_ask(args: argparse.Namespace) -> None:
@@ -70,7 +67,7 @@ def cmd_ask(args: argparse.Namespace) -> None:
     print(f"\n📌 Route: {result['route']}")
     print(f"📎 Sources ({len(result['sources'])}): {result['sources']}")
     if result["key_facts"]:
-        print(f"\n📋 Key facts:")
+        print("\n📋 Key facts:")
         for i, fact in enumerate(result["key_facts"], 1):
             print(f"   {i}. {fact[:120]}...")
 
@@ -86,7 +83,9 @@ def main() -> None:
     # -- build --
     build_parser = subparsers.add_parser("build", help="Build/rebuild the vector store")
     build_parser.add_argument(
-        "--rebuild", action="store_true", default=True,
+        "--rebuild",
+        action="store_true",
+        default=True,
         help="Force full rebuild (delete + re-embed)",
     )
     build_parser.set_defaults(func=cmd_build)
@@ -95,9 +94,13 @@ def main() -> None:
     ask_parser = subparsers.add_parser("ask", help="Ask a question via RAG")
     ask_parser.add_argument("question", help="The question to ask")
     ask_parser.add_argument("--doc-type", default=None, help="Filter by doc_type")
-    ask_parser.add_argument("--tag", default=None, help="Filter by tag(s), comma-separated")
     ask_parser.add_argument(
-        "--index", choices=["facts", "evidence", "both"], default=None,
+        "--tag", default=None, help="Filter by tag(s), comma-separated"
+    )
+    ask_parser.add_argument(
+        "--index",
+        choices=["facts", "evidence", "both"],
+        default=None,
         help="Force a specific index (overrides router)",
     )
     ask_parser.set_defaults(func=cmd_ask)

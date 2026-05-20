@@ -9,7 +9,7 @@ Public API:
 - answer_about_ateet: RAG answer chain (temperature=0)
 - build_or_update_self_info_store: build/refresh both indices
 - retrieve_self_info: hybrid retrieval with filtering
-- get_self_info_store: lazy singleton for both Chroma collections
+- get_self_info_store: lazy singleton for both pgvector stores
 """
 
 from src.knowledge.self_info_rag import answer_about_ateet

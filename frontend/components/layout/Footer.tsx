@@ -2,7 +2,7 @@ export function Footer() {
     const links = [
         { label: "LinkedIn", href: "https://www.linkedin.com/in/ateet-vatan-bahmani/" },
         { label: "GitHub", href: "https://github.com/AteetVatan" },
-        { label: "Portfolio", href: "https://ateetai.vercel.app/" },
+        { label: "Portfolio", href: "https://ateet.masxai.com" },
     ];
 
     return (
@@ -13,7 +13,7 @@ export function Footer() {
 
             <div className="mx-auto flex max-w-7xl flex-col items-center gap-4 px-6 py-10 sm:flex-row sm:justify-between">
                 <p className="text-sm text-[var(--color-text-dim)]">
-                    © {new Date().getFullYear()} Ateet Vatan Bahmani. Built with{" "}
+                    © {new Date().getFullYear()} Ateet Bahamani. Built with{" "}
                     <span className="gradient-text-pink font-medium">EchoAI</span>.
                 </p>
                 <div className="flex gap-6">

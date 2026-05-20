@@ -79,7 +79,7 @@ def _retrieve_from_store(
             search_kwargs=search_kwargs,
         )
         return retriever.invoke(query)
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         logger.warning("Chroma retrieval failed (filter=%s): %s", doc_type, exc)
         # Retry without filter
         retriever = store.as_retriever(
@@ -96,7 +96,7 @@ def _bm25_search(docs: list[Document], query: str, k: int) -> list[Document]:
     try:
         bm25 = BM25Retriever.from_documents(docs, k=k)
         return bm25.invoke(query)
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         logger.warning("BM25 search failed: %s", exc)
         return []
 
@@ -196,11 +196,11 @@ def retrieve_self_info(
 
     # Expand if filtering reduced results too much
     if len(filtered) < k and (doc_type or tags):
-        logger.info("Post-filter yielded %d docs (< k=%d), expanding search", len(filtered), k)
+        logger.info(
+            "Post-filter yielded %d docs (< k=%d), expanding search", len(filtered), k
+        )
         for store in (stores.facts, stores.evidence):
-            extra = _retrieve_from_store(
-                store, query, k=k * 3, search_type=search_type
-            )
+            extra = _retrieve_from_store(store, query, k=k * 3, search_type=search_type)
             extra_filtered = _post_filter(extra, doc_type=doc_type, tags=tags)
             filtered.extend(extra_filtered)
 

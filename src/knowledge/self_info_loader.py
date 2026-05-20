@@ -60,7 +60,7 @@ def load_self_info_items(path: Path | str) -> list[SelfInfoItem]:
     for idx, entry in enumerate(data):
         try:
             items.append(SelfInfoItem.model_validate(entry))
-        except (ValidationError, Exception) as exc:  # noqa: BLE001
+        except (ValidationError, TypeError, ValueError) as exc:
             logger.warning("Skipping item %d in %s: %s", idx, path.name, exc)
             skipped += 1
 

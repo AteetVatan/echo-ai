@@ -2,10 +2,8 @@
 Tests for self_info_schema and self_info_loader.
 """
 
-import os
 import sys
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,8 +12,8 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.knowledge.self_info_schema import SelfInfoItem
-from src.knowledge.self_info_loader import load_self_info_items
+from src.knowledge.self_info_schema import SelfInfoItem  # noqa: E402
+from src.knowledge.self_info_loader import load_self_info_items  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -32,12 +30,12 @@ class TestSelfInfoItem:
             doc_type="about_me",
             tags=["hr", "intro"],
             question="What is your name?",
-            answer="Ateet Vatan Bhatnagar",
+            answer="Ateet Bahamani",
         )
         assert item.doc_type == "about_me"
         assert item.tags == ["hr", "intro"]
         assert item.question == "What is your name?"
-        assert item.answer == "Ateet Vatan Bhatnagar"
+        assert item.answer == "Ateet Bahamani"
 
     def test_normalises_doc_type(self):
         """doc_type is lowercased and stripped."""

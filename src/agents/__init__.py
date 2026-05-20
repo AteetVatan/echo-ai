@@ -6,4 +6,4 @@ The new hybrid architecture is available in src.services.voice_pipeline and src.
 """
 
 # Legacy agents have been replaced by hybrid architecture
-__all__ = [] 
+__all__ = []

@@ -431,7 +431,6 @@ export function useChat() {
         };
 
         vadFrameRef.current = requestAnimationFrame(check);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- all mutable via refs
     }, []);
 
     /* ── MediaRecorder ────────────────────────────────────────────── */

@@ -2,11 +2,11 @@
 
 # 🛰️ MASX-HOTSPOTS
 
-**Copyright (c) 2025 Ateet Vatan Bahmani**  
+**Copyright (c) 2025 Ateet Bahamani**  
 **Project: MASX-HOTSPOTS – Strategic Agentic AI System**  
 **All rights reserved.**
 
-**MASX AI** is a proprietary software system developed and owned by **Ateet Vatan Bahmani**.
+**MASX AI** is a proprietary software system developed and owned by **Ateet Bahamani**.
 
 The source code, documentation, workflows, designs, and naming (including "MASX AI") are protected by applicable copyright and trademark laws.
 
@@ -1423,9 +1423,9 @@ gantt
 
 ## 📄 License
 
-**Copyright (c) 2025 Ateet Vatan Bahmani**
+**Copyright (c) 2025 Ateet Bahamani**
 
-This project is proprietary software developed and owned by Ateet Vatan Bahmani. The source code, documentation, workflows, designs, and naming (including "MASX AI") are protected by applicable copyright and trademark laws.
+This project is proprietary software developed and owned by Ateet Bahamani. The source code, documentation, workflows, designs, and naming (including "MASX AI") are protected by applicable copyright and trademark laws.
 
 **Redistribution, modification, commercial use, or publication of any portion of this project without explicit written consent is strictly prohibited.**
 
@@ -1451,7 +1451,7 @@ This project is not open-source and is intended solely for internal, research, o
 
 <div align="center">
 
-**Built with 🔥 by Ateet Vatan Bahmani — Founder of MASX AI**
+**Built with 🔥 by Ateet Bahamani — Founder of MASX AI**
 
 [Website](https://masxai.com) • [GitHub](https://github.com/AteetVatan/masx-hotspots) • [Portfolio](https://ateetai.vercel.app/) • [Support](mailto:ab@masxai.com)
 

@@ -23,6 +23,7 @@ except ImportError:
 
 WS_URL = "ws://localhost:8000/ws/voice"
 TIMEOUT = 30  # seconds per recv (RAG + TTS can be slow)
+__test__ = False
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ async def recv_json(ws, label: str = "message"):
 
 
 # ── test cases ───────────────────────────────────────────────────────────────
+
 
 async def test_connection(ws) -> str:
     """T1: Should receive a connection message with session_id."""
@@ -100,7 +102,10 @@ async def test_text_message(ws) -> str:
         fail("Text → response", "empty response_text")
         return ""
 
-    ok("Text → response", f"{latency:.1f}s | {len(response)} chars | audio={'yes' if has_audio else 'null'}")
+    ok(
+        "Text → response",
+        f"{latency:.1f}s | {len(response)} chars | audio={'yes' if has_audio else 'null'}",
+    )
     return response
 
 
@@ -127,7 +132,10 @@ async def test_context_followup(ws):
     # A good contextual response should NOT say "I don't have information"
     is_fallback = "don't have specific information" in response.lower()
     if is_fallback:
-        fail("Follow-up → context", "got fallback response — context memory may not be working")
+        fail(
+            "Follow-up → context",
+            "got fallback response — context memory may not be working",
+        )
     else:
         ok("Follow-up → context", f"{latency:.1f}s | context-aware response")
 
@@ -203,9 +211,10 @@ async def test_rapid_messages(ws):
 
 # ── main ─────────────────────────────────────────────────────────────────────
 
+
 async def main():
     print(f"\n{'═' * 60}")
-    print(f"  EchoAI WebSocket Integration Tests")
+    print("  EchoAI WebSocket Integration Tests")
     print(f"  Target: {WS_URL}")
     print(f"{'═' * 60}\n")
 
@@ -213,7 +222,7 @@ async def main():
         async with websockets.connect(WS_URL) as ws:
             # Core flow
             print("── Core Flow ──")
-            session_id = await test_connection(ws)
+            await test_connection(ws)
             await test_ping_pong(ws)
             await test_text_message(ws)
             await test_context_followup(ws)
@@ -231,7 +240,7 @@ async def main():
     except ConnectionRefusedError:
         print("❌  Cannot connect — is the backend running? (python run_dev.py)")
         sys.exit(1)
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, websockets.WebSocketException) as e:
         print(f"❌  Unexpected error: {e}")
         sys.exit(1)
 
@@ -242,7 +251,7 @@ async def main():
     if failed:
         print(f"  |  {failed} FAILED ⚠️")
     else:
-        print(f"  |  ALL PASSED ✅")
+        print("  |  ALL PASSED ✅")
     print(f"{'═' * 60}\n")
 
     sys.exit(1 if failed else 0)

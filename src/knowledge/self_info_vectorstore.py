@@ -1,58 +1,181 @@
 """
-Dual-index Chroma vector store for Self-Info RAG.
+Dual-index Supabase pgvector store for Self-Info RAG.
 
 Index 1 (facts)    — atomic Q&A records from self_info.json
 Index 2 (evidence) — chunked CV, GitHub READMEs, LinkedIn CSVs
 
+Replaces the previous ChromaDB implementation with SupabaseVectorStore.
 The store supports upsert-by-stable_id and an optional full rebuild
 controlled by the ``SELF_INFO_REBUILD`` env var.
+
+On first access, if the pgvector tables are empty, the store builds
+lazily by embedding source documents and inserting into Supabase.
+This removes the need for a Docker build-time dependency on Supabase.
 """
 
 from __future__ import annotations
 
-import os
-import shutil
 import threading
-from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
-from langchain_community.embeddings import SentenceTransformerEmbeddings
-from langchain_chroma import Chroma
+from langchain_core.embeddings import Embeddings
+from postgrest.exceptions import APIError
+from supabase import create_client, Client as SupabaseClient
 
-from src.constants import ChromaCollection
 from src.knowledge.evidence_loader import load_evidence_documents
 from src.knowledge.self_info_documents import to_langchain_documents
 from src.knowledge.self_info_loader import load_self_info_items
+from src.knowledge.supabase_compat import (
+    CompatibleSupabaseVectorStore as SupabaseVectorStore,
+)
 from src.utils import get_logger, get_settings
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Embedding class using transformers directly
+#
+# Necessary because sentence-transformers 5.x is incompatible with
+# transformers 5.x (broken lazy-import paths). This class loads the
+# same HuggingFace model and reproduces the same mean-pooling + L2
+# normalisation that SentenceTransformer('all-MiniLM-L6-v2') performs,
+# producing identical 384-dim vectors.
+# ---------------------------------------------------------------------------
+
+
+class LocalEmbeddings(Embeddings):
+    """LangChain-compatible embeddings using transformers AutoModel.
+
+    Loads ``sentence-transformers/<model_name>`` from HuggingFace and
+    produces 384-dim L2-normalised vectors via mean pooling — identical
+    output to ``SentenceTransformer(model_name).encode()``.
+    """
+
+    BATCH_SIZE = 32  # documents per forward pass
+
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        import torch
+        import transformers
+        from transformers import AutoModel, AutoTokenizer
+
+        # Suppress progress bar + LOAD REPORT (prints directly to stderr)
+        transformers.logging.set_verbosity_error()
+
+        hf_name = f"sentence-transformers/{model_name}"
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(hf_name)
+            self.model = AutoModel.from_pretrained(hf_name)
+        except (OSError, RuntimeError, ValueError) as e:
+            raise RuntimeError(
+                f"Failed to load embedding model '{hf_name}'. "
+                f"Ensure the model is cached or network is available: {e}"
+            ) from e
+
+        # Device selection: CUDA > MPS > CPU
+        if torch.cuda.is_available():
+            self._device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self._device = torch.device("mps")
+        else:
+            self._device = torch.device("cpu")
+
+        self.model.to(self._device).eval()
+        logger.info(
+            "LocalEmbeddings ready: model=%s, device=%s, dim=%d",
+            hf_name,
+            self._device,
+            self.model.config.hidden_size,
+        )
+
+    def _encode_batch(self, texts: list[str]) -> list[list[float]]:
+        """Encode a single batch of texts into normalised embeddings."""
+        import torch
+
+        encoded = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=256,
+            return_tensors="pt",
+        ).to(self._device)
+
+        with torch.no_grad():
+            output = self.model(**encoded)
+
+        # Mean pooling over token embeddings (attention-mask weighted)
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        embeddings = (output.last_hidden_state * mask).sum(1) / mask.sum(1)
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+        return embeddings.cpu().tolist()
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of documents with automatic batching."""
+        if not texts:
+            return []
+
+        results: list[list[float]] = []
+        for i in range(0, len(texts), self.BATCH_SIZE):
+            batch = texts[i : i + self.BATCH_SIZE]
+            try:
+                results.extend(self._encode_batch(batch))
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    logger.warning(
+                        "OOM on batch of %d, falling back to one-at-a-time", len(batch)
+                    )
+                    for text in batch:
+                        results.extend(self._encode_batch([text]))
+                else:
+                    raise
+        return results
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a single query string."""
+        return self._encode_batch([text])[0]
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------
 
-class SelfInfoStores(NamedTuple):
-    """Typed container for the dual-index self-info Chroma stores."""
-    facts: Chroma
-    evidence: Chroma
 
-    def get(self, name: str) -> Chroma:
+class SelfInfoStores(NamedTuple):
+    """Typed container for the dual-index self-info pgvector stores."""
+
+    facts: SupabaseVectorStore
+    evidence: SupabaseVectorStore
+
+    def get(self, name: str) -> SupabaseVectorStore:
         """Access a store by name string (e.g. from query router)."""
         return getattr(self, name)
 
 
 _store_lock = threading.RLock()
 _store_instance: SelfInfoStores | None = None
-_embeddings_instance: SentenceTransformerEmbeddings | None = None
+_embeddings_instance: LocalEmbeddings | None = None
+_supabase_client: SupabaseClient | None = None
 
 
-def _get_embeddings() -> SentenceTransformerEmbeddings:
+def _get_embeddings() -> LocalEmbeddings:
     """Return the shared embedding model (cached singleton — loaded once)."""
     global _embeddings_instance  # noqa: PLW0603
     if _embeddings_instance is None:
         settings = get_settings()
-        _embeddings_instance = SentenceTransformerEmbeddings(model_name=settings.EMBEDDING_MODEL)
+        _embeddings_instance = LocalEmbeddings(model_name=settings.EMBEDDING_MODEL)
     return _embeddings_instance
+
+
+def _get_supabase_client() -> SupabaseClient:
+    """Return a shared Supabase client (singleton)."""
+    global _supabase_client  # noqa: PLW0603
+    if _supabase_client is None:
+        settings = get_settings()
+        _supabase_client = create_client(
+            settings.SUPABASE_URL,
+            settings.SUPABASE_SERVICE_ROLE_KEY,
+        )
+    return _supabase_client
 
 
 # ---------------------------------------------------------------------------
@@ -61,10 +184,10 @@ def _get_embeddings() -> SentenceTransformerEmbeddings:
 
 
 def build_or_update_self_info_store() -> SelfInfoStores:
-    """Build (or refresh) both Chroma indices and return them.
+    """Build (or refresh) both pgvector indices and return them.
 
     Behaviour depends on ``SELF_INFO_REBUILD``:
-    - ``True``  → delete persist dir and re-embed everything from scratch.
+    - ``True``  → TRUNCATE pgvector tables and re-embed everything.
     - ``False`` → upsert only (add new / update changed docs by stable_id).
 
     Returns
@@ -75,44 +198,64 @@ def build_or_update_self_info_store() -> SelfInfoStores:
     global _store_instance  # noqa: PLW0603
 
     settings = get_settings()
-    persist_dir = Path(settings.SELF_INFO_CHROMA_DIR)
     rebuild = settings.SELF_INFO_REBUILD
 
     embeddings = _get_embeddings()
+    client = _get_supabase_client()
 
     # ------------------------------------------------------------------
-    # Optional: full rebuild
+    # Optional: full rebuild via TRUNCATE
     # ------------------------------------------------------------------
-    if rebuild and persist_dir.exists():
-        logger.info("SELF_INFO_REBUILD=1 → deleting %s for full rebuild", persist_dir)
-        shutil.rmtree(persist_dir)
+    if rebuild:
+        logger.info("SELF_INFO_REBUILD=1 → truncating pgvector tables for full rebuild")
+        try:
+            client.table("documents_self_info_facts").delete().neq("id", "").execute()
+            client.table("documents_self_info_evidence").delete().neq(
+                "id", ""
+            ).execute()
+            logger.info("Truncated self-info pgvector tables")
+        except (APIError, RuntimeError, TypeError, ValueError) as e:
+            logger.warning("Failed to truncate tables (may be empty): %s", e)
 
-    persist_dir.mkdir(parents=True, exist_ok=True)
+    # ------------------------------------------------------------------
+    # Create SupabaseVectorStore instances
+    # ------------------------------------------------------------------
+    facts_store = SupabaseVectorStore(
+        client=client,
+        embedding=embeddings,
+        table_name="documents_self_info_facts",
+        query_name="match_self_info_facts",
+    )
+
+    evidence_store = SupabaseVectorStore(
+        client=client,
+        embedding=embeddings,
+        table_name="documents_self_info_evidence",
+        query_name="match_self_info_evidence",
+    )
 
     # ------------------------------------------------------------------
     # Index 1 — Facts (self_info.json)
     # ------------------------------------------------------------------
+    from pathlib import Path
+
     json_path = Path(settings.SELF_INFO_JSON_PATH)
     items = load_self_info_items(json_path)
     fact_docs = to_langchain_documents(items)
 
-    facts_store = Chroma(
-        persist_directory=str(persist_dir),
-        embedding_function=embeddings,
-        collection_name=ChromaCollection.SELF_INFO_FACTS,
-        collection_metadata={"hnsw:space": "cosine"},
-    )
+    _upsert_documents(facts_store, fact_docs, client, "documents_self_info_facts")
 
-    _upsert_documents(facts_store, fact_docs)
     try:
-        _facts_count = facts_store._collection.count()
-    except Exception:
+        result = (
+            client.table("documents_self_info_facts")
+            .select("id", count="exact")
+            .execute()
+        )
+        _facts_count = result.count if result.count is not None else len(fact_docs)
+    except (APIError, RuntimeError, TypeError, ValueError):
         _facts_count = len(fact_docs)
-    logger.info(
-        "Facts index: %d docs in collection '%s'",
-        _facts_count,
-        ChromaCollection.SELF_INFO_FACTS,
-    )
+
+    logger.info("Facts index: %d docs in 'documents_self_info_facts'", _facts_count)
 
     # ------------------------------------------------------------------
     # Index 2 — Evidence (CV, READMEs, LinkedIn)
@@ -120,22 +263,24 @@ def build_or_update_self_info_store() -> SelfInfoStores:
     evidence_dir = Path(settings.EVIDENCE_DOCS_DIR)
     evidence_docs = load_evidence_documents(evidence_dir)
 
-    evidence_store = Chroma(
-        persist_directory=str(persist_dir),
-        embedding_function=embeddings,
-        collection_name=ChromaCollection.SELF_INFO_EVIDENCE,
-        collection_metadata={"hnsw:space": "cosine"},
+    _upsert_documents(
+        evidence_store, evidence_docs, client, "documents_self_info_evidence"
     )
 
-    _upsert_documents(evidence_store, evidence_docs)
     try:
-        _evidence_count = evidence_store._collection.count()
-    except Exception:
+        result = (
+            client.table("documents_self_info_evidence")
+            .select("id", count="exact")
+            .execute()
+        )
+        _evidence_count = (
+            result.count if result.count is not None else len(evidence_docs)
+        )
+    except (APIError, RuntimeError, TypeError, ValueError):
         _evidence_count = len(evidence_docs)
+
     logger.info(
-        "Evidence index: %d docs in collection '%s'",
-        _evidence_count,
-        ChromaCollection.SELF_INFO_EVIDENCE,
+        "Evidence index: %d docs in 'documents_self_info_evidence'", _evidence_count
     )
 
     result = SelfInfoStores(facts=facts_store, evidence=evidence_store)
@@ -143,7 +288,7 @@ def build_or_update_self_info_store() -> SelfInfoStores:
     with _store_lock:
         _store_instance = result
 
-    logger.info("Self-Info vector store ready at %s", persist_dir)
+    logger.info("Self-Info pgvector store ready")
     return result
 
 
@@ -151,8 +296,14 @@ def build_or_update_self_info_store() -> SelfInfoStores:
 # Upsert helper
 # ---------------------------------------------------------------------------
 
-def _upsert_documents(store: Chroma, docs: list) -> None:
-    """Upsert documents using their ``stable_id`` metadata as Chroma IDs."""
+
+def _upsert_documents(
+    store: SupabaseVectorStore,
+    docs: list,
+    client: SupabaseClient,
+    table_name: str,
+) -> None:
+    """Upsert documents using their ``stable_id`` metadata as IDs."""
     if not docs:
         return
 
@@ -160,23 +311,20 @@ def _upsert_documents(store: Chroma, docs: list) -> None:
     texts = [doc.page_content for doc in docs]
     metadatas = [doc.metadata for doc in docs]
 
-    # Chroma's underlying collection supports upsert natively
-    store._collection.upsert(
-        ids=ids,
-        documents=texts,
-        metadatas=metadatas,
-        embeddings=store._embedding_function.embed_documents(texts),
-    )
+    # SupabaseVectorStore.add_texts supports ids= for upsert
+    store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
 
 
 # ---------------------------------------------------------------------------
 # Lazy singleton accessor
 # ---------------------------------------------------------------------------
 
+
 def get_self_info_store() -> SelfInfoStores:
     """Return the singleton store, building it on first call.
 
     Thread-safe for typical app usage (single build, many reads).
+    If the pgvector tables are empty, triggers a full build (~10s).
     """
     global _store_instance  # noqa: PLW0603
 
@@ -189,47 +337,47 @@ def get_self_info_store() -> SelfInfoStores:
             return _store_instance
 
         settings = get_settings()
-        persist_dir = Path(settings.SELF_INFO_CHROMA_DIR)
         embeddings = _get_embeddings()
+        client = _get_supabase_client()
 
-        # If persist dir exists and has data, reuse it (no rebuild)
-        if persist_dir.exists() and not settings.SELF_INFO_REBUILD:
+        # Check if pgvector tables already have data
+        if not settings.SELF_INFO_REBUILD:
             try:
-                facts_store = Chroma(
-                    persist_directory=str(persist_dir),
-                    embedding_function=embeddings,
-                    collection_name=ChromaCollection.SELF_INFO_FACTS,
-                    collection_metadata={"hnsw:space": "cosine"},
+                facts_store = SupabaseVectorStore(
+                    client=client,
+                    embedding=embeddings,
+                    table_name="documents_self_info_facts",
+                    query_name="match_self_info_facts",
                 )
-                evidence_store = Chroma(
-                    persist_directory=str(persist_dir),
-                    embedding_function=embeddings,
-                    collection_name=ChromaCollection.SELF_INFO_EVIDENCE,
-                    collection_metadata={"hnsw:space": "cosine"},
+                evidence_store = SupabaseVectorStore(
+                    client=client,
+                    embedding=embeddings,
+                    table_name="documents_self_info_evidence",
+                    query_name="match_self_info_evidence",
                 )
 
-                # Probe with similarity_search instead of count() 
-                # (count() crashes on ChromaDB 0.5.0 with SQLite compat bug)
-                probe = facts_store.similarity_search("test", k=1)
-                if len(probe) > 0:
-                    logger.info(
-                        "Reusing existing self-info store from %s",
-                        persist_dir,
+                # Probe: do the tables have data?
+                # Use a lightweight row-count query instead of similarity_search
+                # to avoid supabase-py/postgrest-py '.params' incompatibility.
+                probe = (
+                    client.table("documents_self_info_facts")
+                    .select("id", count="exact")
+                    .limit(1)
+                    .execute()
+                )
+                if probe.count and probe.count > 0:
+                    logger.info("Reusing existing self-info pgvector store")
+                    _store_instance = SelfInfoStores(
+                        facts=facts_store, evidence=evidence_store
                     )
-                    _store_instance = SelfInfoStores(facts=facts_store, evidence=evidence_store)
                     return _store_instance
                 else:
-                    logger.info("Persisted store is empty, will rebuild")
-            except Exception as reuse_err:
+                    logger.info("pgvector tables are empty, will build")
+            except (APIError, RuntimeError, TypeError, ValueError) as reuse_err:
                 logger.warning(
-                    "Failed to reuse persisted store (%s). "
-                    "Deleting and rebuilding from scratch.",
+                    "Failed to probe pgvector store (%s). Building from scratch.",
                     reuse_err,
                 )
-                try:
-                    shutil.rmtree(persist_dir)
-                except Exception as rm_err:
-                    logger.error("Could not delete corrupt store dir: %s", rm_err)
 
         # Build fresh
         logger.info("Building self-info store (first access or empty)")

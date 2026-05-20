@@ -55,7 +55,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # These layers (~600MB total) won't be invalidated by source code changes
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')" \
     || echo "Warning: Could not pre-download Whisper model (will download at runtime)"
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+RUN python -c "from transformers import AutoModel, AutoTokenizer; AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); print('Embedding model cached OK')" \
     || echo "Warning: Could not pre-download embedding model (will download at runtime)"
 
 # ── Copy backend application ─────────────────────────────────
@@ -70,11 +70,7 @@ COPY --from=frontend-builder /app/frontend/.next/static ./frontend_standalone/.n
 COPY --from=frontend-builder /app/frontend/public ./frontend_standalone/public
 
 # ── Create necessary directories ─────────────────────────────
-RUN mkdir -p src/db/chroma_db \
-    && mkdir -p src/db/self_info_knowledge \
-    && mkdir -p src/db/self_info_knowledge_v2 \
-    && mkdir -p audio_cache \
-    && mkdir -p logs \
+RUN mkdir -p logs \
     && mkdir -p /var/log/nginx
 
 # ── nginx config ─────────────────────────────────────────────
@@ -85,12 +81,6 @@ RUN sed -i 's/\r$//' /etc/nginx/nginx.conf.template
 COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
-# ── Pre-build vectorstore (needs source code + documents) ────
-# Dummy API keys because Settings requires them, but vectorstore
-# build only uses the embedding model and local document files
-RUN DEEPSEEK_API_KEY=dummy OPENAI_API_KEY=dummy MISTRAL_API_KEY=dummy \
-    python -c "from src.knowledge.self_info_vectorstore import build_or_update_self_info_store; build_or_update_self_info_store()" \
-    || echo "Warning: Could not pre-build vectorstore (will build at runtime)"
 
 # ── Health check ─────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \

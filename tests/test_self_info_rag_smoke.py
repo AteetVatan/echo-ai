@@ -17,24 +17,24 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv()
 
 
 def _has_llm_key() -> bool:
     """Check if any LLM API key is available."""
-    return bool(
-        os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("MISTRAL_API_KEY")
-    )
+    return bool(os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("MISTRAL_API_KEY"))
 
 
 def _store_is_built() -> bool:
     """Check if the vector store has been built."""
     try:
         from src.knowledge.self_info_vectorstore import get_self_info_store
+
         stores = get_self_info_store()
         return stores["facts"]._collection.count() > 0
-    except Exception:
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
         return False
 
 
@@ -42,7 +42,9 @@ def _store_is_built() -> bool:
 def rag_ready():
     """Skip if store not built or no LLM key."""
     if not _store_is_built():
-        pytest.skip("Vector store not built. Run: python -m src.tools.self_info_cli build")
+        pytest.skip(
+            "Vector store not built. Run: python -m src.tools.self_info_cli build"
+        )
     if not _has_llm_key():
         pytest.skip("No LLM API key available (DEEPSEEK_API_KEY or MISTRAL_API_KEY)")
 
@@ -77,9 +79,7 @@ class TestAnswerAboutAteet:
         """Should refuse to answer about information not in the knowledge base."""
         from src.knowledge.self_info_rag import answer_about_ateet
 
-        result = answer_about_ateet(
-            "What is the chemical formula for water?"
-        )
+        result = answer_about_ateet("What is the chemical formula for water?")
 
         # Should either refuse or give a very generic non-hallucinated response
         answer_lower = result["answer"].lower()

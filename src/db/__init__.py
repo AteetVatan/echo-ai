@@ -1,3 +1,3 @@
-from .db_operations import DBOperations
+from .db_operations import AudioCacheRecord, DBOperations, ReplyCacheRecord
 
-__all__ = ["DBOperations"]
+__all__ = ["AudioCacheRecord", "DBOperations", "ReplyCacheRecord"]

@@ -6,21 +6,29 @@ audio streaming and voice chat functionality.
 """
 
 import asyncio
+import contextlib
 import json
 import uuid
 import base64
 import hmac
 import hashlib
 import time
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    HTTPException,
+    Depends,
+    Request,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 import uvicorn
 
 from src.services.voice_pipeline import voice_pipeline
@@ -29,11 +37,14 @@ from src.services.llm_service import llm_service
 from src.services.tts_service import tts_service
 from src.utils import get_settings, validate_api_keys
 from src.utils import setup_logging, get_logger
-from src.utils.audio import audio_stream_processor
 from src.api.connection_manager import ConnectionManager
 from src.constants import (
-    WSMessageType, AUDIO_CHUNK_MAX_BYTES, AUDIO_BUFFER_MAX_BYTES, APIRoute,
+    WSMessageType,
+    AUDIO_CHUNK_MAX_BYTES,
+    AUDIO_BUFFER_MAX_BYTES,
+    APIRoute,
 )
+from src.exceptions import EchoAIError
 
 
 # Setup logging
@@ -50,13 +61,13 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="EchoAI Voice Chat API",
     description="Real-time AI voice chat with STT→LLM→TTS pipeline",
-    version="1.0.0"
+    version="1.0.0",
 )
 app.state.limiter = limiter
 
 
 @app.exception_handler(RateLimitExceeded)
-async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
         content={"detail": "Rate limit exceeded. Please slow down."},
@@ -81,12 +92,13 @@ app.add_middleware(
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-async def verify_api_key(api_key: str = Depends(_api_key_header)):
+def verify_api_key(api_key: str = Depends(_api_key_header)):
     """Reject requests that lack a valid API key."""
     if not settings.ECHOAI_API_KEY:
         return  # key not configured → auth disabled (dev convenience)
     if api_key != settings.ECHOAI_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
 
 # Global connection manager
 manager = ConnectionManager()
@@ -95,6 +107,7 @@ manager = ConnectionManager()
 # ---------------------------------------------------------------------------
 # Pydantic request/response models for REST chat API
 # ---------------------------------------------------------------------------
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -113,11 +126,17 @@ async def startup_event():
     """Initialize services on startup."""
     try:
         logger.info("Starting EchoAI Voice Chat API...")
-        
+
         # Validate API keys
         if not validate_api_keys():
-            logger.warning("Some API keys are missing or invalid. Check your .env file.")
-        
+            logger.warning(
+                "Some API keys are missing or invalid. Check your .env file."
+            )
+
+        # Initialize async DBOperations (Supabase Postgres + Storage)
+        await tts_service.initialize()
+        logger.info("DBOperations initialised ✓")
+
         # Fire-and-forget heavy warm-up tasks so Uvicorn starts accepting
         # connections immediately.  Each task runs concurrently in the
         # background; if a request arrives before they finish the lazy
@@ -125,10 +144,11 @@ async def startup_event():
         async def _background_warmup():
             try:
                 from src.agents.langchain_rag_agent import get_rag_agent
+
                 tasks = [
                     stt_service.warm_up_models(),
                     llm_service.warm_up_models(),
-                    asyncio.to_thread(get_rag_agent),
+                    asyncio.to_thread(get_rag_agent, tts_service.db),
                 ]
                 if not settings.SKIP_TTS_WARMUP:
                     tasks.append(tts_service.warm_up_cache())
@@ -136,14 +156,14 @@ async def startup_event():
                     logger.info("Skipping TTS cache warm-up (SKIP_TTS_WARMUP=1)")
                 await asyncio.gather(*tasks)
                 logger.info("All warm-up tasks completed ✓")
-            except Exception as e:
+            except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
                 logger.error(f"Background warm-up error: {e}")
 
-        asyncio.create_task(_background_warmup())
+        app.state.background_warmup_task = asyncio.create_task(_background_warmup())
 
         logger.info("EchoAI Voice Chat API started (warm-up running in background)")
-        
-    except Exception as e:
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to start API: {str(e)}")
         raise
 
@@ -153,14 +173,21 @@ async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down EchoAI Voice Chat API...")
     logger.info("Closing all WebSocket connections...")
-    for session_id in list(manager.active_connections.keys()):
+    active_session_ids = tuple(manager.active_connections)
+    for session_id in active_session_ids:
         manager.disconnect(session_id)
-    
-    # Cleanup services
+
+    warmup_task = getattr(app.state, "background_warmup_task", None)
+    if warmup_task and not warmup_task.done():
+        warmup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await warmup_task
+
+    # Cleanup services (async DB pool + Storage)
     try:
-        tts_service.cleanup()
+        await tts_service.cleanup()
         logger.info("Services cleanup completed")
-    except Exception as e:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to cleanup services: {str(e)}")
 
 
@@ -175,7 +202,28 @@ async def root():
     }
 
 
-@app.post(APIRoute.CHAT, response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
+@app.get(
+    "/frontend",
+    include_in_schema=False,
+    responses={404: {"description": "Frontend is served by Next.js"}},
+)
+async def frontend_redirect():
+    """Redirect the legacy development frontend URL to the Next.js app."""
+    if settings.DEBUG:
+        return RedirectResponse(settings.FRONTEND_URL)
+    raise HTTPException(status_code=404, detail="Frontend is served by Next.js")
+
+
+@app.post(
+    APIRoute.CHAT,
+    response_model=ChatResponse,
+    dependencies=[Depends(verify_api_key)],
+    responses={
+        400: {"description": "Message exceeds the configured maximum length"},
+        403: {"description": "Invalid or missing API key"},
+        500: {"description": "Chat processing failed"},
+    },
+)
 @limiter.limit(lambda: f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def chat(request: Request, req: ChatRequest):
     # Input length validation
@@ -200,27 +248,32 @@ async def chat(request: Request, req: ChatRequest):
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
-@app.get(APIRoute.PERSONA, dependencies=[Depends(verify_api_key)])
+@app.get(
+    APIRoute.PERSONA,
+    dependencies=[Depends(verify_api_key)],
+    responses={403: {"description": "Invalid or missing API key"}},
+)
 @limiter.limit(lambda: f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def persona(request: Request):
     return {
-        "name": "Ateet Vatan Bahmani",
-        "title": "AI Engineer | LLM Integration & AI Automation Expert",
+        "name": "Ateet Bahamani",
+        "title": "AI Architect / Agentic AI Engineer",
         "bio": (
-            "AI Engineer based in Essen, Germany, specializing in LLM integration, "
-            "AI workflow automation, LangChain development, AutoGen multi-agent systems, "
-            "and AI system design."
+            "AI Architect / Agentic AI Engineer based in Essen, Germany, "
+            "specializing in deterministic, auditable Agentic AI systems, "
+            "multi-agent orchestration, RAG-grounded reasoning, and "
+            "production-grade AI workflows."
         ),
         "location": "Essen, Germany",
         "links": {
             "linkedin": "https://www.linkedin.com/in/ateet-vatan-bahmani/",
             "github": "https://github.com/AteetVatan",
-            "portfolio": "https://ateetai.vercel.app/",
+            "portfolio": "https://ateet.masxai.com",
             "email": "ab@masxai.com",
         },
     }
@@ -241,7 +294,7 @@ async def health_check():
             "tts": "ready",
         }
         status = "healthy"
-    except Exception:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError):
         services = {
             "pipeline": "warming_up",
             "stt": "warming_up",
@@ -258,7 +311,10 @@ async def health_check():
     }
 
 
-@app.get("/stats")
+@app.get(
+    "/stats",
+    responses={500: {"description": "Failed to get system statistics"}},
+)
 async def get_stats():
     """Get system statistics."""
     try:
@@ -268,7 +324,7 @@ async def get_stats():
         llm_stats = llm_service.get_performance_stats()
         tts_stats = tts_service.get_performance_stats()
         active_sessions = manager.get_active_sessions()
-        
+
         return {
             "active_connections": len(manager.active_connections),
             "active_sessions": active_sessions,
@@ -277,25 +333,28 @@ async def get_stats():
             "service_performance": {
                 "stt": stt_stats,
                 "llm": llm_stats,
-                "tts": tts_stats
+                "tts": tts_stats,
             },
             "server_info": {
                 "version": "1.0.0",
-                "uptime": asyncio.get_event_loop().time()
-            }
+                "uptime": asyncio.get_event_loop().time(),
+            },
         }
-    except Exception as e:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to get stats: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get statistics")
 
 
-@app.post("/clear-conversation")
+@app.post(
+    "/clear-conversation",
+    responses={500: {"description": "Failed to clear conversation history"}},
+)
 async def clear_conversation():
     """Clear conversation history."""
     try:
         voice_pipeline.clear_conversation()
         return {"message": "Conversation cleared successfully"}
-    except Exception as e:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to clear conversation: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to clear conversation")
 
@@ -332,137 +391,186 @@ def _verify_ws_token(token: str, secret: str) -> bool:
 @app.websocket("/ws/voice")
 async def websocket_voice_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time voice chat with streaming support."""
-    
-    # Resolve client IP
     client_ip = websocket.client.host if websocket.client else "unknown"
     session_id = str(uuid.uuid4())
-    
-    # ── Per-IP connection cap ─────────────────────────────────────
+
     if not manager.can_accept(client_ip):
-        await websocket.accept()
-        await websocket.close(code=1008, reason="Too many connections from this IP")
-        logger.warning(f"Rejected WS from {client_ip}: connection cap exceeded")
+        await _reject_ws_connection(websocket, client_ip)
         return
 
     try:
         await manager.connect(websocket, session_id, ip=client_ip)
-        
-        # ── First-message authentication (HMAC session tokens) ─────
-        # The frontend fetches a signed token from /api/auth/ws-token
-        # (a Next.js API route). The raw ECHOAI_API_KEY never leaves
-        # the server. We verify the HMAC signature + timestamp here.
-        if settings.ECHOAI_API_KEY:
-            try:
-                auth_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
-                auth_msg = json.loads(auth_raw)
-                token = auth_msg.get("token", "")
-                if (
-                    auth_msg.get("type") != "auth"
-                    or not _verify_ws_token(token, settings.ECHOAI_API_KEY)
-                ):
-                    await websocket.send_text(json.dumps({
-                        "type": "auth_failed",
-                        "message": "Invalid or expired token",
-                    }))
-                    await websocket.close(code=1008, reason="Authentication failed")
-                    manager.disconnect(session_id)
-                    return
-            except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
-                await websocket.close(code=1008, reason="Authentication timeout")
-                manager.disconnect(session_id)
-                return
+        if not await _authenticate_websocket(websocket, session_id):
+            return
 
-            await websocket.send_text(json.dumps({"type": "auth_success"}))
-
-        # Send welcome message
-        await manager.send_message(session_id, {
-            "type": WSMessageType.CONNECTION,
-            "session_id": session_id,
-            "message": "Connected to EchoAI Voice Chat",
-            "features": ["streaming_audio", "real_time_processing"]
-        })
-        
+        await _send_ws_welcome(session_id)
         logger.info(f"Voice chat session started: {session_id} (IP: {client_ip})")
-        
-        while True: # WebSocket connections are open indefinitely.
-            try:
-                # Receive message from client
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                
-                message_type = message.get("type")
-                
-                # ── Per-IP rate limiting (skip pings) ─────────────
-                if message_type != WSMessageType.PING and not manager.check_rate_limit(session_id):
-                    await manager.send_message(session_id, {
-                        "type": WSMessageType.ERROR,
-                        "message": "Rate limit exceeded. Please slow down.",
-                    })
-                    continue
-                
-                logger.info(f"session_id: {session_id}")
-                logger.info(f"message_type: {message_type}")
+        await _receive_ws_messages(websocket, session_id)
 
-                if message_type == WSMessageType.AUDIO:
-                    #Full audio file is sent in one message.
-                    await handle_audio_message(session_id, message)
-                elif message_type == WSMessageType.AUDIO_CHUNK:
-                    #Streaming audio chunks
-                    await handle_audio_chunk_message(session_id, message)
-                elif message_type == WSMessageType.START_STREAMING:
-                    # real-time audio stream.
-                    await handle_start_streaming(session_id, message)
-                elif message_type == WSMessageType.STOP_STREAMING:
-                    # real-time audio stream.
-                    await handle_stop_streaming(session_id, message)
-                elif message_type == WSMessageType.TEXT:
-                    await handle_text_message(session_id, message)
-                elif message_type == "clear_history":
-                    # FIX #9: frontend Clear Chat resets server-side context
-                    try:
-                        await voice_pipeline.rag_agent.clear_session_history(session_id)
-                    except Exception:
-                        pass
-                elif message_type == WSMessageType.PING:
-                    #Health check 
-                    await manager.send_message(session_id, {"type": WSMessageType.PONG})
-                elif message_type == WSMessageType.STREAMING_BUFFER:
-                    # Process streaming buffer in real-time
-                    await handle_streaming_buffer(session_id, message)
-                else:
-                    await manager.send_message(session_id, {
-                        "type": WSMessageType.ERROR,
-                        "message": f"Unknown message type: {message_type}"
-                    })
-                    
-            except WebSocketDisconnect:
-                logger.info(f"WebSocket disconnected: {session_id}")
-                break
-            except json.JSONDecodeError:
-                await manager.send_message(session_id, {
-                    "type": WSMessageType.ERROR,
-                    "message": "Invalid JSON format"
-                })
-            except Exception as e:
-                err_msg = str(e)
-                # Starlette raises this when the WS is gone — treat as disconnect
-                if "not connected" in err_msg.lower() or "accept" in err_msg.lower():
-                    logger.info(f"WebSocket already closed for {session_id}, disconnecting.")
-                    break
-                logger.error(f"Error processing message: {err_msg}")
-                await manager.send_message(session_id, {
-                    "type": WSMessageType.ERROR,
-                    "message": f"Processing error: {err_msg}"
-                })
-                
-    except Exception as e:
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"WebSocket error for session {session_id}: {str(e)}")
     finally:
         manager.disconnect(session_id)
         try:
             await voice_pipeline.rag_agent.clear_session_history(session_id)
-        except Exception:
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError):
             pass
+
+
+async def _reject_ws_connection(websocket: WebSocket, client_ip: str):
+    """Reject a WebSocket connection that exceeds the per-IP cap."""
+    await websocket.accept()
+    await websocket.close(code=1008, reason="Too many connections from this IP")
+    logger.warning(f"Rejected WS from {client_ip}: connection cap exceeded")
+
+
+async def _authenticate_websocket(websocket: WebSocket, session_id: str) -> bool:
+    """Authenticate the first WebSocket message when API-key auth is enabled."""
+    if not settings.ECHOAI_API_KEY:
+        return True
+
+    try:
+        auth_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+        auth_msg = json.loads(auth_raw)
+        token = auth_msg.get("token", "")
+        if auth_msg.get("type") == "auth" and _verify_ws_token(
+            token, settings.ECHOAI_API_KEY
+        ):
+            await websocket.send_text(json.dumps({"type": "auth_success"}))
+            return True
+
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "auth_failed",
+                    "message": "Invalid or expired token",
+                }
+            )
+        )
+        await websocket.close(code=1008, reason="Authentication failed")
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError):
+        await websocket.close(code=1008, reason="Authentication timeout")
+
+    manager.disconnect(session_id)
+    return False
+
+
+async def _send_ws_welcome(session_id: str):
+    """Send the initial connection message."""
+    await manager.send_message(
+        session_id,
+        {
+            "type": WSMessageType.CONNECTION,
+            "session_id": session_id,
+            "message": "Connected to EchoAI Voice Chat",
+            "features": ["streaming_audio", "real_time_processing"],
+        },
+    )
+
+
+async def _receive_ws_messages(websocket: WebSocket, session_id: str):
+    """Receive and process WebSocket messages until the connection closes."""
+    while True:
+        try:
+            await _process_next_ws_message(websocket, session_id)
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected: {session_id}")
+            break
+        except json.JSONDecodeError:
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "Invalid JSON format",
+                },
+            )
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+            if _is_closed_ws_error(e):
+                logger.info(
+                    f"WebSocket already closed for {session_id}, disconnecting."
+                )
+                break
+            logger.error(f"Error processing message: {str(e)}")
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": f"Processing error: {str(e)}",
+                },
+            )
+
+
+async def _process_next_ws_message(websocket: WebSocket, session_id: str):
+    """Receive one WebSocket message and dispatch it."""
+    data = await websocket.receive_text()
+    message = json.loads(data)
+    message_type = message.get("type")
+
+    if not await _message_allowed_by_rate_limit(session_id, message_type):
+        return
+
+    logger.info(f"session_id: {session_id}")
+    logger.info(f"message_type: {message_type}")
+    await _dispatch_ws_message(session_id, message, message_type)
+
+
+async def _message_allowed_by_rate_limit(session_id: str, message_type: str) -> bool:
+    """Return whether the inbound WebSocket message is under the rate limit."""
+    if message_type == WSMessageType.PING or manager.check_rate_limit(session_id):
+        return True
+
+    await manager.send_message(
+        session_id,
+        {
+            "type": WSMessageType.ERROR,
+            "message": "Rate limit exceeded. Please slow down.",
+        },
+    )
+    return False
+
+
+async def _dispatch_ws_message(
+    session_id: str,
+    message: Dict[str, Any],
+    message_type: str,
+):
+    """Dispatch a decoded WebSocket message to the matching handler."""
+    if message_type == WSMessageType.AUDIO:
+        await handle_audio_message(session_id, message)
+    elif message_type == WSMessageType.AUDIO_CHUNK:
+        await handle_audio_chunk_message(session_id, message)
+    elif message_type == WSMessageType.START_STREAMING:
+        await handle_start_streaming(session_id, message)
+    elif message_type == WSMessageType.STOP_STREAMING:
+        await handle_stop_streaming(session_id, message)
+    elif message_type == WSMessageType.TEXT:
+        await handle_text_message(session_id, message)
+    elif message_type == "clear_history":
+        await _clear_ws_history(session_id)
+    elif message_type == WSMessageType.PING:
+        await manager.send_message(session_id, {"type": WSMessageType.PONG})
+    elif message_type == WSMessageType.STREAMING_BUFFER:
+        await handle_streaming_buffer(session_id, message)
+    else:
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Unknown message type: {message_type}",
+            },
+        )
+
+
+async def _clear_ws_history(session_id: str):
+    """Clear server-side RAG context for a WebSocket session."""
+    with contextlib.suppress(Exception):
+        await voice_pipeline.rag_agent.clear_session_history(session_id)
+
+
+def _is_closed_ws_error(error: Exception) -> bool:
+    """Return True for Starlette errors emitted after the socket is gone."""
+    err_msg = str(error).lower()
+    return "not connected" in err_msg or "accept" in err_msg
 
 
 async def handle_audio_message(session_id: str, message: Dict[str, Any]):
@@ -471,62 +579,69 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
         # Extract audio data
         audio_data_b64 = message.get("audio")
         if not audio_data_b64:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "No audio data provided"
-            })
+            await manager.send_message(
+                session_id,
+                {"type": WSMessageType.ERROR, "message": "No audio data provided"},
+            )
             return
-        
+
         # Decode base64 audio data
         audio_data = base64.b64decode(audio_data_b64)
-        
+
         # Send processing status
-        await manager.send_message(session_id, {
-            "type": WSMessageType.PROCESSING,
-            "message": "Processing your voice input..."
-        })
-        
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.PROCESSING,
+                "message": "Processing your voice input...",
+            },
+        )
+
         # Process voice input through pipeline
         result = await voice_pipeline.process_voice_input(audio_data, session_id)
-        
+
         # Check for errors
         if result.error:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": result.error
-            })
+            await manager.send_message(
+                session_id, {"type": WSMessageType.ERROR, "message": result.error}
+            )
             return
-        
+
         # FIX T1: Only encode audio if TTS produced data
         response_audio_b64 = (
-            base64.b64encode(result.audio_data).decode()
-            if result.audio_data else None
+            base64.b64encode(result.audio_data).decode() if result.audio_data else None
         )
-        
+
         # Send response
-        await manager.send_message(session_id, {
-            "type": WSMessageType.RESPONSE,
-            "transcription": result.transcription,
-            "response_text": result.response_text,
-            "audio": response_audio_b64,
-            "latency": {
-                "pipeline": result.pipeline_latency,
-                "stt": result.stt_latency,
-                "rag": result.rag_latency,
-                "llm": result.llm_latency,
-                "tts": result.tts_latency
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.RESPONSE,
+                "transcription": result.transcription,
+                "response_text": result.response_text,
+                "audio": response_audio_b64,
+                "latency": {
+                    "pipeline": result.pipeline_latency,
+                    "stt": result.stt_latency,
+                    "rag": result.rag_latency,
+                    "llm": result.llm_latency,
+                    "tts": result.tts_latency,
+                },
+                "models_used": result.models_used,
             },
-            "models_used": result.models_used
-        })
-        
+        )
+
         logger.info(f"Voice processing completed for session {session_id}")
-        
-    except Exception as e:
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to process audio for session {session_id}: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to process audio: {str(e)}"
-        })
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to process audio: {str(e)}",
+            },
+        )
 
 
 async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
@@ -534,92 +649,123 @@ async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
     try:
         # Check if session is in streaming mode
         if not manager.streaming_sessions.get(session_id, False):
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "Not in streaming mode. Send 'start_streaming' first."
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "Not in streaming mode. Send 'start_streaming' first.",
+                },
+            )
             return
-        
+
         # Extract audio chunk data
         audio_chunk_b64 = message.get("audio_chunk")
         if not audio_chunk_b64:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "No audio chunk data provided"
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "No audio chunk data provided",
+                },
+            )
             return
-        
+
         # Decode base64 audio chunk
         try:
             audio_chunk = base64.b64decode(audio_chunk_b64)
-        except Exception as e:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": f"Invalid base64 audio data: {str(e)}"
-            })
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": f"Invalid base64 audio data: {str(e)}",
+                },
+            )
             return
-        
+
         # Validate chunk size (prevent memory abuse)
         if len(audio_chunk) > AUDIO_CHUNK_MAX_BYTES:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "Audio chunk too large (max 1MB per chunk)"
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "Audio chunk too large (max 1MB per chunk)",
+                },
+            )
             return
-        
+
         # Check total buffer size (prevent memory overflow)
         current_buffer = manager.get_audio_buffer(session_id)
         total_size = sum(len(chunk) for chunk in current_buffer) + len(audio_chunk)
         if total_size > AUDIO_BUFFER_MAX_BYTES:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "Audio buffer full (max 10MB total). Stop streaming to process."
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "Audio buffer full (max 10MB total). Stop streaming to process.",
+                },
+            )
             return
-        
+
         # Add to session buffer
         manager.add_audio_chunk(session_id, audio_chunk)
-        
+
         # Send acknowledgment
-        await manager.send_message(session_id, {
-            "type": WSMessageType.CHUNK_RECEIVED,
-            "chunk_size": len(audio_chunk),
-            "buffer_size": len(manager.get_audio_buffer(session_id)),
-            "total_bytes": total_size + len(audio_chunk)
-        })
-        
-        logger.debug(f"Audio chunk received for session {session_id}: {len(audio_chunk)} bytes")
-        
-    except Exception as e:
-        logger.error(f"Failed to process audio chunk for session {session_id}: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to process audio chunk: {str(e)}"
-        })
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.CHUNK_RECEIVED,
+                "chunk_size": len(audio_chunk),
+                "buffer_size": len(manager.get_audio_buffer(session_id)),
+                "total_bytes": total_size + len(audio_chunk),
+            },
+        )
+
+        logger.debug(
+            f"Audio chunk received for session {session_id}: {len(audio_chunk)} bytes"
+        )
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+        logger.error(
+            f"Failed to process audio chunk for session {session_id}: {str(e)}"
+        )
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to process audio chunk: {str(e)}",
+            },
+        )
 
 
 async def handle_start_streaming(session_id: str, message: Dict[str, Any]):
     """Handle start streaming request."""
     try:
         # Set streaming status
-        manager.set_streaming_status(session_id, True)
-        
+        manager.set_streaming_status(session_id, is_streaming=True)
+
         # Clear any existing audio buffer
         manager.clear_audio_buffer(session_id)
-        
-        await manager.send_message(session_id, {
-            "type": WSMessageType.STREAMING_STARTED,
-            "message": "Audio streaming started"
-        })
-        
+
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.STREAMING_STARTED,
+                "message": "Audio streaming started",
+            },
+        )
+
         logger.info(f"Audio streaming started for session {session_id}")
-        
-    except Exception as e:
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to start streaming for session {session_id}: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to start streaming: {str(e)}"
-        })
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to start streaming: {str(e)}",
+            },
+        )
 
 
 async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
@@ -627,93 +773,110 @@ async def handle_stop_streaming(session_id: str, message: Dict[str, Any]):
     try:
         # Check if session was actually streaming
         if not manager.streaming_sessions.get(session_id, False):
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "Not in streaming mode. No audio to process."
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": "Not in streaming mode. No audio to process.",
+                },
+            )
             return
-        
+
         # Set streaming status to false
-        manager.set_streaming_status(session_id, False)
-        
+        manager.set_streaming_status(session_id, is_streaming=False)
+
         # Get accumulated audio chunks
         audio_chunks = manager.get_audio_buffer(session_id)
-        
+
         if not audio_chunks:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.STREAMING_STOPPED,
-                "message": "Streaming stopped, but no audio data was received",
-                "chunks_count": 0
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.STREAMING_STOPPED,
+                    "message": "Streaming stopped, but no audio data was received",
+                    "chunks_count": 0,
+                },
+            )
             return
-        
+
         # Calculate total audio size
         total_audio_size = sum(len(chunk) for chunk in audio_chunks)
-        
+
         # Send processing status
-        await manager.send_message(session_id, {
-            "type": WSMessageType.PROCESSING,
-            "message": "Processing streaming audio...",
-            "chunks_count": len(audio_chunks),
-            "total_audio_bytes": total_audio_size
-        })
-        
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.PROCESSING,
+                "message": "Processing streaming audio...",
+                "chunks_count": len(audio_chunks),
+                "total_audio_bytes": total_audio_size,
+            },
+        )
+
         # Process streaming voice input through pipeline
         result = await voice_pipeline.process_streaming_voice(audio_chunks, session_id)
-        
+
         if result.error:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": result.error
-            })
+            await manager.send_message(
+                session_id, {"type": WSMessageType.ERROR, "message": result.error}
+            )
             # Clear buffer even on error to prevent memory leak
             manager.clear_audio_buffer(session_id)
             return
-        
+
         # FIX T1: Only encode audio if TTS produced data
         response_audio_b64 = (
-            base64.b64encode(result.audio_data).decode()
-            if result.audio_data else None
+            base64.b64encode(result.audio_data).decode() if result.audio_data else None
         )
-        
+
         # Send response with enhanced metadata
-        await manager.send_message(session_id, {
-            "type": WSMessageType.STREAMING_RESPONSE,
-            "transcription": result.transcription,
-            "response_text": result.response_text,
-            "audio": response_audio_b64,
-            "latency": {
-                "pipeline": result.pipeline_latency,
-                "stt": result.stt_latency,
-                "rag": result.rag_latency,
-                "tts": result.tts_latency,
-                "chunks_processed": result.chunks_processed
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.STREAMING_RESPONSE,
+                "transcription": result.transcription,
+                "response_text": result.response_text,
+                "audio": response_audio_b64,
+                "latency": {
+                    "pipeline": result.pipeline_latency,
+                    "stt": result.stt_latency,
+                    "rag": result.rag_latency,
+                    "tts": result.tts_latency,
+                    "chunks_processed": result.chunks_processed,
+                },
+                "audio_info": {
+                    "input_chunks": len(audio_chunks),
+                    "input_bytes": total_audio_size,
+                    "output_bytes": len(result.audio_data),
+                },
+                "cache_info": {
+                    "semantic_cache_hit": result.semantic_cache_hit,
+                    "similarity_score": result.similarity_score,
+                    "rag_used": result.rag_used,
+                },
             },
-            "audio_info": {
-                "input_chunks": len(audio_chunks),
-                "input_bytes": total_audio_size,
-                "output_bytes": len(result.audio_data)
-            },
-            "cache_info": {
-                "semantic_cache_hit": result.semantic_cache_hit,
-                "similarity_score": result.similarity_score,
-                "rag_used": result.rag_used
-            }
-        })
-        
+        )
+
         # Clear audio buffer after successful processing
         manager.clear_audio_buffer(session_id)
-        
-        logger.info(f"Streaming voice processing completed for session {session_id}: "
-                   f"{len(audio_chunks)} chunks, {total_audio_size} bytes, "
-                   f"{result.pipeline_latency:.3f}s latency")
-        
-    except Exception as e:
-        logger.error(f"Failed to process streaming audio for session {session_id}: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to process streaming audio: {str(e)}"
-        })
+
+        logger.info(
+            f"Streaming voice processing completed for session {session_id}: "
+            f"{len(audio_chunks)} chunks, {total_audio_size} bytes, "
+            f"{result.pipeline_latency:.3f}s latency"
+        )
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+        logger.error(
+            f"Failed to process streaming audio for session {session_id}: {str(e)}"
+        )
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to process streaming audio: {str(e)}",
+            },
+        )
         # Clear buffer on error to prevent memory leak
         manager.clear_audio_buffer(session_id)
 
@@ -724,64 +887,71 @@ async def handle_text_message(session_id: str, message: Dict[str, Any]):
         text = message.get("text", "").strip()
         voice_mode = message.get("voice_mode", False)
         if not text:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "No text provided"
-            })
+            await manager.send_message(
+                session_id, {"type": WSMessageType.ERROR, "message": "No text provided"}
+            )
             return
-        
+
         # Input length validation
         if len(text) > settings.MAX_TEXT_LENGTH:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": f"Message too long (max {settings.MAX_TEXT_LENGTH} characters)"
-            })
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.ERROR,
+                    "message": f"Message too long (max {settings.MAX_TEXT_LENGTH} characters)",
+                },
+            )
             return
-        
+
         # Send processing status
-        await manager.send_message(session_id, {
-            "type": WSMessageType.PROCESSING,
-            "message": "Generating response..."
-        })
-        
+        await manager.send_message(
+            session_id,
+            {"type": WSMessageType.PROCESSING, "message": "Generating response..."},
+        )
+
         # Process text input through pipeline
-        result = await voice_pipeline.process_text_input(text, session_id, skip_tts=not voice_mode)
-        
+        result = await voice_pipeline.process_text_input(
+            text, session_id, skip_tts=not voice_mode
+        )
+
         # Check for errors
         if result.error:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": result.error
-            })
+            await manager.send_message(
+                session_id, {"type": WSMessageType.ERROR, "message": result.error}
+            )
             return
-        
+
         # FIX R3: Only encode audio if TTS produced data
         response_audio_b64 = (
-            base64.b64encode(result.audio_data).decode()
-            if result.audio_data
-            else None
+            base64.b64encode(result.audio_data).decode() if result.audio_data else None
         )
-        
+
         # Send response
-        await manager.send_message(session_id, {
-            "type": WSMessageType.TEXT_RESPONSE,
-            "response_text": result.response_text,
-            "audio": response_audio_b64,
-            "latency": {
-                "pipeline": result.pipeline_latency,
-                "rag": result.rag_latency,
-                "tts": result.tts_latency
-            }
-        })
-        
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.TEXT_RESPONSE,
+                "response_text": result.response_text,
+                "audio": response_audio_b64,
+                "latency": {
+                    "pipeline": result.pipeline_latency,
+                    "rag": result.rag_latency,
+                    "tts": result.tts_latency,
+                },
+            },
+        )
+
         logger.info(f"Text processing completed for session {session_id}")
-        
-    except Exception as e:
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to process text for session {session_id}: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to process text: {str(e)}"
-        })
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to process text: {str(e)}",
+            },
+        )
 
 
 async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
@@ -790,47 +960,51 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         # Extract audio data
         audio_b64 = message.get("audio")
         if not audio_b64:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": "No audio data provided"
-            })
+            await manager.send_message(
+                session_id,
+                {"type": WSMessageType.ERROR, "message": "No audio data provided"},
+            )
             return
-        
+
         # Decode audio
         audio_data = base64.b64decode(audio_b64)
-        
+
         # Process immediately (don't buffer)
         result = await voice_pipeline.process_streaming_voice([audio_data], session_id)
-        
+
         if result.error:
-            await manager.send_message(session_id, {
-                "type": WSMessageType.ERROR,
-                "message": result.error
-            })
+            await manager.send_message(
+                session_id, {"type": WSMessageType.ERROR, "message": result.error}
+            )
             return
-        
+
         # FIX U1: Only encode audio if TTS produced data
         response_audio_b64 = (
-            base64.b64encode(result.audio_data).decode()
-            if result.audio_data else None
+            base64.b64encode(result.audio_data).decode() if result.audio_data else None
         )
-        
-        await manager.send_message(session_id, {
-            "type": WSMessageType.STREAMING_RESPONSE,
-            "transcription": result.transcription,
-            "response_text": result.response_text,
-            "audio": response_audio_b64,
-            "latency": result.pipeline_latency
-        })
-        
+
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.STREAMING_RESPONSE,
+                "transcription": result.transcription,
+                "response_text": result.response_text,
+                "audio": response_audio_b64,
+                "latency": result.pipeline_latency,
+            },
+        )
+
         logger.info(f"Real-time streaming response sent for session {session_id}")
-        
-    except Exception as e:
+
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
         logger.error(f"Failed to process streaming buffer: {str(e)}")
-        await manager.send_message(session_id, {
-            "type": WSMessageType.ERROR,
-            "message": f"Failed to process streaming buffer: {str(e)}"
-        })
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Failed to process streaming buffer: {str(e)}",
+            },
+        )
 
 
 def run_server():
@@ -839,5 +1013,5 @@ def run_server():
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
-        log_level=settings.LOG_LEVEL.lower()
+        log_level=settings.LOG_LEVEL.lower(),
     )
