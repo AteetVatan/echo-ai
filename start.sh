@@ -47,7 +47,7 @@ echo "  Starting FastAPI backend on :$BACKEND_PORT..."
 cd /app
 LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_LEVEL="${LOG_LEVEL,,}"   # uvicorn requires lowercase
-python -m uvicorn src.api.main:app \
+python -m uvicorn backend.api.main:app \
     --host 0.0.0.0 \
     --port "$BACKEND_PORT" \
     --log-level "$LOG_LEVEL" \

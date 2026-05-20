@@ -60,7 +60,7 @@ source .venv/bin/activate
 
 ```bash
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 > ⏳ This installs PyTorch, Transformers, Supabase, LangChain, etc. — the first install may take several minutes.
@@ -86,7 +86,7 @@ See the full [Environment Variables Reference](#-environment-variables-reference
 ### 5. Start the Backend Server
 
 ```bash
-python run_dev.py
+python backend/run_dev.py
 ```
 
 This starts both development servers:
@@ -218,7 +218,7 @@ docker run -p 8000:8000 --env-file .env echoai
 
 The backend is now accessible at `http://localhost:8000`.
 
-> **Note:** For local development, `python run_dev.py` starts the backend and Next.js frontend together. If you run the backend manually, start the frontend separately as described in step 6 above.
+> **Note:** For local development, `python backend/run_dev.py` starts the backend and Next.js frontend together. If you run the backend manually, start the frontend separately as described in step 6 above.
 
 ---
 
@@ -228,12 +228,12 @@ The backend is now accessible at `http://localhost:8000`.
 # Make sure your virtual environment is active
 
 # Run all tests
-python -m pytest tests/ -v
+python -m pytest backend/tests/ -v
 
 # Run a specific test file
-python -m pytest tests/test_self_info_loader.py -v
-python -m pytest tests/test_self_info_rag_smoke.py -v
-python -m pytest tests/test_self_info_retriever.py -v
+python -m pytest backend/tests/test_self_info_loader.py -v
+python -m pytest backend/tests/test_self_info_rag_smoke.py -v
+python -m pytest backend/tests/test_self_info_retriever.py -v
 ```
 
 ---
@@ -244,10 +244,10 @@ EchoAI ships with a CLI tool to build and query the self-info vector index:
 
 ```bash
 # Build the vector index from self_info.json + evidence documents
-python -m src.tools.self_info_cli build
+python -m backend.tools.self_info_cli build
 
 # Ask a question against the index
-python -m src.tools.self_info_cli ask "What is your email?"
+python -m backend.tools.self_info_cli ask "What is your email?"
 ```
 
 ---
@@ -289,7 +289,7 @@ All variables are configured in the `.env` file. Below is the full list:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SELF_INFO_JSON_PATH` | `src/documents/self_info.json` | Path to the persona JSON knowledge file |
+| `SELF_INFO_JSON_PATH` | `backend/documents/self_info.json` | Path to the persona JSON knowledge file |
 | `SELF_INFO_REBUILD` | `0` | Set to `1` to force-rebuild the vector index on startup |
 | `EVIDENCE_DOCS_DIR` | `rag_persona_db/document` | Directory containing evidence documents for RAG |
 
@@ -323,7 +323,7 @@ All variables are configured in the `.env` file. Below is the full list:
 
 | Problem | Solution |
 |---------|----------|
-| `ModuleNotFoundError` | Make sure the virtual environment is activated and `pip install -r requirements.txt` completed successfully. |
+| `ModuleNotFoundError` | Make sure the virtual environment is activated and `pip install -r backend/requirements.txt` completed successfully. |
 | PyTorch install fails | Try installing PyTorch separately first: `pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu` |
 | `.env` not found error | Copy `env.example` to `.env` and fill in your API keys. |
 | Port 8000 already in use | Change `PORT` in `.env`, or stop the other process. |

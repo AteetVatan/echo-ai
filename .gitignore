@@ -154,5 +154,5 @@ out/
 node_modules/
 
 # ChromaDB / vector database binary files
-# Note: src/db/chroma_db/ (reply cache) is committed for pre-built cache
-src/db/self_info_knowledge/
+# Note: backend/db/chroma_db/ (reply cache) is committed for pre-built cache
+backend/db/self_info_knowledge/

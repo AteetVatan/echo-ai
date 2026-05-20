@@ -836,7 +836,7 @@ EchoAI/
 ├── run_dev.py                           # Development startup script
 ├── main_debug_no_ws.py                  # Debug mode without WebSocket
 │
-├── src/                                 # Backend source code root
+├── backend/                             # Backend source code root
 │   ├── __init__.py                      # Package init (version, author)
 │   ├── constants.py                     # Enums & numeric thresholds
 │   ├── exceptions.py                    # Typed exception hierarchy
@@ -931,7 +931,7 @@ EchoAI/
 │   │
 │   └── public/                          # Static assets
 │
-├── tests/                               # Unit & smoke tests
+├── backend/tests/                               # Unit & smoke tests
 │   ├── test_self_info_loader.py          # SelfInfoLoader validation tests
 │   ├── test_self_info_retriever.py       # Hybrid retriever tests
 │   └── test_self_info_rag_smoke.py       # End-to-end RAG smoke test
@@ -1041,7 +1041,7 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
 # Set up environment variables
 cp env.example .env
@@ -1102,10 +1102,10 @@ TTS_TIMEOUT=8.0
 
 ```bash
 # Recommended: uses run_dev.py (hot reload, debug logging, CORS)
-python run_dev.py
+python backend/run_dev.py
 
 # Or manually with uvicorn
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **Development URLs:**
@@ -1124,7 +1124,7 @@ docker build -t echoai .
 docker run -d -p 8000:8000 --env-file .env --name echoai echoai
 
 # Or with Gunicorn
-gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+gunicorn backend.api.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
 ### Testing & CLI
@@ -1132,29 +1132,29 @@ gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8
 ```bash
 # ── Self-Info RAG CLI ──────────────────────────────────────────────
 # Build (or rebuild) the dual-index vector store
-python -m src.tools.self_info_cli build
-python -m src.tools.self_info_cli build --rebuild
+python -m backend.tools.self_info_cli build
+python -m backend.tools.self_info_cli build --rebuild
 
 # Ask questions via grounded RAG chain
-python -m src.tools.self_info_cli ask "What is your email address?"
-python -m src.tools.self_info_cli ask "Tell me about ApplyBots" --index evidence
-python -m src.tools.self_info_cli ask "What are your skills?" --doc-type about_me --tag hr
+python -m backend.tools.self_info_cli ask "What is your email address?"
+python -m backend.tools.self_info_cli ask "Tell me about ApplyBots" --index evidence
+python -m backend.tools.self_info_cli ask "What are your skills?" --doc-type about_me --tag hr
 
 # ── Unit & Smoke Tests ────────────────────────────────────────────
-python -m pytest tests/ -v
-python -m pytest tests/test_self_info_loader.py -v       # Pydantic validation
-python -m pytest tests/test_self_info_retriever.py -v    # Hybrid retriever
-python -m pytest tests/test_self_info_rag_smoke.py -v    # End-to-end RAG
+python -m pytest backend/tests/ -v
+python -m pytest backend/tests/test_self_info_loader.py -v       # Pydantic validation
+python -m pytest backend/tests/test_self_info_retriever.py -v    # Hybrid retriever
+python -m pytest backend/tests/test_self_info_rag_smoke.py -v    # End-to-end RAG
 
 # ── Service Smoke Tests ───────────────────────────────────────────
 # Test RAG agent
-python -c "from src.agents.langchain_rag_agent import rag_agent; print('RAG Agent loaded successfully')"
+python -c "from backend.agents.langchain_rag_agent import rag_agent; print('RAG Agent loaded successfully')"
 
 # Test TTS service
-python -m src.services.tts_service
+python -m backend.services.tts_service
 
 # Test STT service
-python -m src.services.stt_service
+python -m backend.services.stt_service
 ```
 
 ---
@@ -1248,7 +1248,7 @@ Send a `text` type message over WebSocket (or use the frontend text input) to by
 
 ## ⚙️ Configuration Reference
 
-### Constants & Thresholds (`src/constants.py`)
+### Constants & Thresholds (`backend/constants.py`)
 
 | Constant | Value | Description |
 |----------|-------|-------------|
@@ -1312,25 +1312,25 @@ Send a `text` type message over WebSocket (or use the frontend text input) to by
 **Vector Search Not Working**
 ```bash
 # Verify pgvector connection
-python -c "from src.knowledge.self_info_vectorstore import _get_supabase_client; print(_get_supabase_client())"
+python -c "from backend.knowledge.self_info_vectorstore import _get_supabase_client; print(_get_supabase_client())"
 
 # Verify embeddings model
-python -c "from src.knowledge.self_info_vectorstore import _get_embeddings; e = _get_embeddings(); print(len(e.embed_query('test')))"
+python -c "from backend.knowledge.self_info_vectorstore import _get_embeddings; e = _get_embeddings(); print(len(e.embed_query('test')))"
 ```
 
 **Knowledge Base Empty**
 ```bash
 # Check self_info.json exists and is valid
-python -c "import json; json.load(open('src/documents/self_info.json'))"
+python -c "import json; json.load(open('backend/documents/self_info.json'))"
 
 # Verify knowledge base initialization
-python -c "from src.agents.langchain_rag_agent import rag_agent; print('KB:', rag_agent.self_info_knowledge_base)"
+python -c "from backend.agents.langchain_rag_agent import rag_agent; print('KB:', rag_agent.self_info_knowledge_base)"
 ```
 
 **Cache Not Working**
 ```bash
 # Check Supabase reply cache
-python -c "from src.db.db_operations import DBOperations; import asyncio; db = DBOperations(); asyncio.run(db.initialize()); print('DB OK')"
+python -c "from backend.db.db_operations import DBOperations; import asyncio; db = DBOperations(); asyncio.run(db.initialize()); print('DB OK')"
 ```
 
 ### Audio Issues
@@ -1363,7 +1363,7 @@ wscat -c ws://localhost:8000/ws/test-session
 **Mistral Fallback Also Failing**
 - Verify `MISTRAL_API_KEY` in `.env`
 - Check `MISTRAL_API_BASE` URL
-- Review error logs: `python -c "from src.services.llm_service import llm_service; print(llm_service.get_performance_stats())"`
+- Review error logs: `python -c "from backend.services.llm_service import llm_service; print(llm_service.get_performance_stats())"`
 
 ---
 
@@ -1404,7 +1404,7 @@ cd echo-ai
 git checkout -b feature/amazing-feature
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
 # Make changes and commit
 git add .
@@ -1418,8 +1418,8 @@ git push origin feature/amazing-feature
 - Follow **PEP 8** for Python code
 - Use **type hints** for all function parameters
 - Write **docstrings** for all public functions
-- Use typed exceptions from `src/exceptions.py`
-- Use constants/enums from `src/constants.py` (no magic strings)
+- Use typed exceptions from `backend/exceptions.py`
+- Use constants/enums from `backend/constants.py` (no magic strings)
 - Follow **conventional commits** for commit messages
 
 ### Pull Request Process

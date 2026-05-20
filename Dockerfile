@@ -24,44 +24,59 @@ RUN npm run build
 # ============================================================
 FROM python:3.11-slim-bookworm
 
+LABEL org.opencontainers.image.title="EchoAI" \
+      org.opencontainers.image.description="Voice chat with AI Clone — FastAPI + Next.js + RAG behind nginx" \
+      org.opencontainers.image.source="https://github.com/AteetVatan/echo-ai"
+
 WORKDIR /app
 
-# ── System dependencies ───────────────────────────────────────
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    libffi-dev \
-    libssl-dev \
-    curl \
-    nginx \
-    gettext-base \
+# ── System dependencies (single layer) ────────────────────────
+# nodejs from NodeSource is needed for the Next.js standalone runtime.
+# Build deps (gcc/g++/libffi-dev/libssl-dev) stay in the image because
+# some pip packages may still compile on import; stripping them is a
+# separate, riskier optimization.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg \
+        gcc g++ libffi-dev libssl-dev \
+        nginx gettext-base \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20 for Next.js standalone runtime
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# ── Python runtime config ─────────────────────────────────────
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# ── Python dependencies ──────────────────────────────────────
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
+# ── Python deps + ML model preloads (single ~600MB layer) ────
+# pip install MUST succeed (chained with `&&`). Model preloads are
+# wrapped in `{ ... || echo; }` groups so a download failure becomes a
+# warning (models lazy-load at runtime) without masking a real pip error.
+COPY backend/requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && { python -c "\
+from faster_whisper import WhisperModel; \
+WhisperModel('small', device='cpu', compute_type='int8')" \
+        || echo "WARN: Whisper preload failed; will download at runtime"; } \
+    && { python -c "\
+from transformers import AutoModel, AutoTokenizer; \
+AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); \
+AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); \
+print('Embedding model cached OK')" \
+        || echo "WARN: Embedding model preload failed; will download at runtime"; }
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# ── Application code (selective; no leaked dev artifacts) ─────
+# /app needs at runtime: backend/ (FastAPI), rag_persona_db/ (RAG corpus),
+# frontend_standalone/ (built Next.js, copied below).
+COPY backend/ ./backend/
+COPY rag_persona_db/ ./rag_persona_db/
 
-# ── Pre-download ML models BEFORE code copy (cached layer) ───
-# These layers (~600MB total) won't be invalidated by source code changes
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')" \
-    || echo "Warning: Could not pre-download Whisper model (will download at runtime)"
-RUN python -c "from transformers import AutoModel, AutoTokenizer; AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); print('Embedding model cached OK')" \
-    || echo "Warning: Could not pre-download embedding model (will download at runtime)"
-
-# ── Copy backend application ─────────────────────────────────
-COPY . .
-
-# ── Copy built frontend from Stage 1 ─────────────────────────
+# ── Built frontend from Stage 1 ───────────────────────────────
 # Standalone output: .next/standalone/ contains server.js + node_modules
 COPY --from=frontend-builder /app/frontend/.next/standalone ./frontend_standalone
 # Static assets must live at <standalone>/.next/static
@@ -69,22 +84,17 @@ COPY --from=frontend-builder /app/frontend/.next/static ./frontend_standalone/.n
 # Public assets must live at <standalone>/public
 COPY --from=frontend-builder /app/frontend/public ./frontend_standalone/public
 
-# ── Create necessary directories ─────────────────────────────
-RUN mkdir -p logs \
-    && mkdir -p /var/log/nginx
-
-# ── nginx config ─────────────────────────────────────────────
+# ── nginx config + startup script + runtime dirs ──────────────
 COPY nginx.conf /etc/nginx/nginx.conf.template
-RUN sed -i 's/\r$//' /etc/nginx/nginx.conf.template
-
-# ── Startup script ───────────────────────────────────────────
 COPY start.sh /app/start.sh
-RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
+RUN sed -i 's/\r$//' /etc/nginx/nginx.conf.template /app/start.sh \
+    && chmod +x /app/start.sh \
+    && mkdir -p /app/logs /var/log/nginx
 
-
-# ── Health check ─────────────────────────────────────────────
+# ── Health check ──────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
-# ── Entrypoint ───────────────────────────────────────────────
+EXPOSE 8080
+
 ENTRYPOINT ["/app/start.sh"]
