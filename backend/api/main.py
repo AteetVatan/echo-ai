@@ -407,7 +407,18 @@ async def websocket_voice_endpoint(websocket: WebSocket):
         logger.info(f"Voice chat session started: {session_id} (IP: {client_ip})")
         await _receive_ws_messages(websocket, session_id)
 
-    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected: {session_id}")
+    except asyncio.TimeoutError:
+        logger.info(f"WebSocket timed out: {session_id}")
+    except (
+        EchoAIError,
+        RuntimeError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ) as e:
         logger.error(f"WebSocket error for session {session_id}: {str(e)}")
     finally:
         manager.disconnect(session_id)
@@ -432,26 +443,43 @@ async def _authenticate_websocket(websocket: WebSocket, session_id: str) -> bool
     try:
         auth_raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
         auth_msg = json.loads(auth_raw)
-        token = auth_msg.get("token", "")
-        if auth_msg.get("type") == "auth" and _verify_ws_token(
-            token, settings.ECHOAI_API_KEY
-        ):
+        token = auth_msg.get("token", "") if isinstance(auth_msg, dict) else ""
+        msg_type = auth_msg.get("type") if isinstance(auth_msg, dict) else None
+        if msg_type == "auth" and _verify_ws_token(token, settings.ECHOAI_API_KEY):
             await websocket.send_text(json.dumps({"type": "auth_success"}))
             return True
 
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "auth_failed",
-                    "message": "Invalid or expired token",
-                }
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "auth_failed",
+                        "message": "Invalid or expired token",
+                    }
+                )
             )
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.close(code=1008, reason="Authentication failed")
+    except asyncio.TimeoutError:
+        logger.info(
+            f"WS auth timeout for {session_id}; client never sent auth message"
         )
-        await websocket.close(code=1008, reason="Authentication failed")
-    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError):
-        await websocket.close(code=1008, reason="Authentication timeout")
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.close(code=1008, reason="Authentication timeout")
+    except WebSocketDisconnect:
+        logger.info(f"WS disconnected before auth: {session_id}")
+    except (
+        ValueError,
+        EchoAIError,
+        RuntimeError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ) as e:
+        logger.warning(f"WS auth error for {session_id}: {e}")
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.close(code=1008, reason="Authentication error")
 
-    manager.disconnect(session_id)
     return False
 
 
