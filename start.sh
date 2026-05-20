@@ -1,5 +1,9 @@
 #!/bin/bash
-set -x  # Print every command for Railway deploy-log debugging
+# Gate command-tracing behind DEBUG_STARTUP so prod logs stay readable.
+# Set DEBUG_STARTUP=1 on Railway to re-enable for deploy debugging.
+if [ "${DEBUG_STARTUP:-0}" = "1" ]; then
+    set -x
+fi
 # Do NOT use `set -e` — we manage errors explicitly so Railway sees logs.
 
 echo "═══════════════════════════════════════════════════"
@@ -24,7 +28,7 @@ envsubst '${PORT} ${BACKEND_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx
 
 # Validate nginx config before starting anything
 echo "  Testing nginx config..."
-nginx -t 2>&1 || { echo "ERROR: nginx config test failed!"; }
+nginx -t 2>&1 || { echo "ERROR: nginx config test failed!"; exit 1; }
 
 # ── 2. Start nginx FIRST (foreground-ready, but backgrounded) ─────
 # Nginx starts almost instantly and will serve /health directly,

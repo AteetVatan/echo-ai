@@ -70,6 +70,12 @@ AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2'); \
 print('Embedding model cached OK')" \
         || echo "WARN: Embedding model preload failed; will download at runtime"; }
 
+# Models are baked into the image above. Skip HF Hub revalidation HEAD
+# requests at runtime so cold-starts don't depend on huggingface.co
+# being reachable / un-throttled. MUST be set AFTER the preload step.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 # ── Application code (selective; no leaked dev artifacts) ─────
 # /app needs at runtime: backend/ (FastAPI), rag_persona_db/ (RAG corpus),
 # frontend_standalone/ (built Next.js, copied below).
