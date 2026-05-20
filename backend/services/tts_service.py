@@ -11,6 +11,7 @@ Caching strategy:
 """
 
 import asyncio
+import hashlib
 import re
 import time
 from typing import Dict, Any, List, Optional, AsyncGenerator
@@ -55,6 +56,10 @@ class TTSService:
 
         self.streaming_enabled = settings.TTS_STREAMING
 
+        # Strong-ref set for fire-and-forget Supabase saves so the event
+        # loop doesn't garbage-collect them mid-flight.
+        self._background_tasks: set[asyncio.Task] = set()
+
         # Performance tracking
         self.performance_stats = {
             "total_syntheses": 0,
@@ -84,10 +89,38 @@ class TTSService:
         except (DatabaseError, OSError, RuntimeError, ValueError) as exc:
             logger.warning("TTS cache warmup failed: %s", exc)
 
+    def _persist_audio_async(
+        self, text: str, audio_data: bytes, voice: str
+    ) -> None:
+        """Schedule a Supabase save as a background task (best-effort)."""
+        task = asyncio.create_task(
+            self._persist_audio(text, audio_data, voice)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _persist_audio(
+        self, text: str, audio_data: bytes, voice: str
+    ) -> None:
+        """Save audio to Supabase. Errors are logged, never raised."""
+        try:
+            await self.db.save_audio(
+                AudioCacheRecord(
+                    text=text, audio_data=audio_data, voice_id=voice
+                )
+            )
+        except (DatabaseError, OSError, RuntimeError, ValueError) as exc:
+            logger.warning("Background TTS save failed: %s", exc)
+
     def _get_cache_key(self, text: str, voice: str = None) -> str:
-        """Generate cache key for text and voice combination."""
+        """Generate cache key for text and voice combination.
+
+        Uses sha256 so the key is stable across process restarts;
+        Python's built-in hash() is randomized per PYTHONHASHSEED and
+        would force every L1 lookup to miss on a cold process.
+        """
         v = voice or self.voice
-        text_hash = str(abs(hash(text)))
+        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
         return f"{v}_{text_hash}"
 
     def _is_cached(self, text: str, voice: str = None) -> bool:
@@ -208,16 +241,11 @@ class TTSService:
             # Cache the result in L1
             self._cache_audio(text, result["audio_data"], voice)
 
-            # Save to Supabase (async)
-            try:
-                v = voice or self.voice
-                await self.db.save_audio(
-                    AudioCacheRecord(
-                        text=text, audio_data=result["audio_data"], voice_id=v
-                    )
-                )
-            except (DatabaseError, OSError, RuntimeError, ValueError) as exc:
-                logger.warning("Failed to save audio to Supabase: %s", exc)
+            # Persist to Supabase in the background — the caller already has
+            # the bytes, so storage I/O shouldn't add to user-visible latency.
+            # Matters most for per-sentence streaming, where this used to add
+            # ~50-100ms × N sentences to inter-sentence gaps.
+            self._persist_audio_async(text, result["audio_data"], voice or self.voice)
 
             self._update_stats(result["latency"], success=True)
             return result
@@ -300,9 +328,6 @@ class TTSService:
 
                 for chunk in audio_chunks:
                     yield chunk
-
-                # Small delay between sentences for natural flow
-                await asyncio.sleep(0.1)
 
         except TTSError as e:
             log_error_with_context(
@@ -400,6 +425,18 @@ class TTSService:
 
     async def cleanup(self) -> None:
         """Clean up database connections."""
+        # Drain in-flight background saves so audio is preserved across
+        # graceful shutdowns. Tasks that don't finish in time are explicitly
+        # cancelled so they can't write to a closed DB connection below.
+        pending = [t for t in self._background_tasks if not t.done()]
+        if pending:
+            try:
+                _, still_pending = await asyncio.wait(pending, timeout=5.0)
+                for task in still_pending:
+                    task.cancel()
+            except RuntimeError as exc:
+                logger.warning("TTS background drain interrupted: %s", exc)
+
         try:
             await self.db.close()
             logger.info("TTS service cleanup completed")

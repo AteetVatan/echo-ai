@@ -34,6 +34,12 @@ class WSMessageType(str, Enum):
     CHUNK_RECEIVED = "chunk_received"
     ERROR = "error"
 
+    # Per-sentence streamed TTS pipeline (LLM astream → sentence-pump TTS → WS)
+    AUDIO_STREAMING = "audio_streaming"  # inbound: client opts into streamed response
+    AUDIO_STREAM_START = "audio_stream_start"
+    AUDIO_DELTA = "audio_delta"
+    AUDIO_STREAM_END = "audio_stream_end"
+
 
 # ---------------------------------------------------------------------------
 # Pipeline / RAG source labels

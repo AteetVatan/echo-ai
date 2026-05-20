@@ -171,35 +171,56 @@ class LLMService:
             return {"error": f"LLM failed: {exc}"}
 
     async def _generate_with_deepseek(self, user_input: str) -> dict[str, Any]:
-        """Generate a response through DeepSeek."""
+        """Generate a response through DeepSeek (streaming)."""
         start_time = time.time()
         try:
             if not self.deepseek_client:
                 raise LLMError("DeepSeek client not initialized")
-            response = await self._create_deepseek_completion(user_input)
-            return self._deepseek_result(response, start_time)
+            content, tokens_used = await self._stream_deepseek_completion(user_input)
+            return self._deepseek_result(content, tokens_used, start_time)
         except DEEPSEEK_ERRORS as exc:
             self._raise_llm_error("_generate_with_deepseek", start_time, exc)
 
-    async def _create_deepseek_completion(self, user_input: str):
-        """Call the OpenAI-compatible DeepSeek chat completion API."""
-        return await self.deepseek_client.chat.completions.create(
+    async def _stream_deepseek_completion(
+        self, user_input: str
+    ) -> tuple[str, int]:
+        """Stream tokens from DeepSeek and assemble the final response.
+
+        Streaming surfaces tokens to the client as they're generated rather
+        than buffering server-side until completion, trimming end-to-end
+        latency by the cost of one full-response network flush.
+        """
+        stream = await self.deepseek_client.chat.completions.create(
             model=self.deepseek_model,
             messages=self._deepseek_messages(user_input),
             temperature=self.temperature,
             timeout=self.timeout,
+            stream=True,
+            stream_options={"include_usage": True},
         )
 
-    def _deepseek_result(self, response: Any, start_time: float) -> dict[str, Any]:
-        """Build a public result payload from a DeepSeek response."""
+        parts: list[str] = []
+        tokens_used = 0
+        async for chunk in stream:
+            if chunk.choices:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    parts.append(delta.content)
+            if chunk.usage and chunk.usage.total_tokens:
+                tokens_used = chunk.usage.total_tokens
+        return "".join(parts).strip(), tokens_used
+
+    def _deepseek_result(
+        self, content: str, tokens_used: int, start_time: float
+    ) -> dict[str, Any]:
+        """Build a public result payload from streamed DeepSeek output."""
         latency = time.time() - start_time
-        content = response.choices[0].message.content.strip()
         logger.debug("DeepSeek generation completed in %.3fs", latency)
         return {
             "text": self._clean_response(content),
             "model": ModelName.DEEPSEEK_AI,
             "latency": latency,
-            "tokens_used": response.usage.total_tokens,
+            "tokens_used": tokens_used,
         }
 
     def _deepseek_messages(self, user_input: str) -> list[dict[str, str]]:

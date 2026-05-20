@@ -103,6 +103,52 @@ def verify_api_key(api_key: str = Depends(_api_key_header)):
 # Global connection manager
 manager = ConnectionManager()
 
+# Shared error strings (deduped to satisfy Sonar S1192)
+_NO_AUDIO_DATA_MSG = "No audio data provided"
+
+
+async def _decode_audio_blob(
+    session_id: str, audio_b64: Optional[str]
+) -> Optional[bytes]:
+    """Decode and size-cap an inbound audio blob. Sends a WS error on failure.
+
+    Returns the raw audio bytes on success, or None when an error message has
+    already been sent (caller should bail out).
+    """
+    if not audio_b64:
+        await manager.send_message(
+            session_id,
+            {"type": WSMessageType.ERROR, "message": _NO_AUDIO_DATA_MSG},
+        )
+        return None
+
+    try:
+        audio_data = base64.b64decode(audio_b64)
+    except (ValueError, TypeError) as exc:
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Invalid base64 audio data: {exc}",
+            },
+        )
+        return None
+
+    if len(audio_data) > AUDIO_BUFFER_MAX_BYTES:
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": (
+                    f"Audio blob too large "
+                    f"(max {AUDIO_BUFFER_MAX_BYTES // (1024 * 1024)}MB)"
+                ),
+            },
+        )
+        return None
+
+    return audio_data
+
 
 # ---------------------------------------------------------------------------
 # Pydantic request/response models for REST chat API
@@ -583,6 +629,8 @@ async def _dispatch_ws_message(
     """Dispatch a decoded WebSocket message to the matching handler."""
     if message_type == WSMessageType.AUDIO:
         await handle_audio_message(session_id, message)
+    elif message_type == WSMessageType.AUDIO_STREAMING:
+        await handle_audio_streaming_message(session_id, message)
     elif message_type == WSMessageType.AUDIO_CHUNK:
         await handle_audio_chunk_message(session_id, message)
     elif message_type == WSMessageType.START_STREAMING:
@@ -622,17 +670,9 @@ def _is_closed_ws_error(error: Exception) -> bool:
 async def handle_audio_message(session_id: str, message: Dict[str, Any]):
     """Handle complete audio message from client (legacy support)."""
     try:
-        # Extract audio data
-        audio_data_b64 = message.get("audio")
-        if not audio_data_b64:
-            await manager.send_message(
-                session_id,
-                {"type": WSMessageType.ERROR, "message": "No audio data provided"},
-            )
+        audio_data = await _decode_audio_blob(session_id, message.get("audio"))
+        if audio_data is None:
             return
-
-        # Decode base64 audio data
-        audio_data = base64.b64decode(audio_data_b64)
 
         # Send processing status
         await manager.send_message(
@@ -688,6 +728,94 @@ async def handle_audio_message(session_id: str, message: Dict[str, Any]):
                 "message": f"Failed to process audio: {str(e)}",
             },
         )
+
+
+async def handle_audio_streaming_message(session_id: str, message: Dict[str, Any]):
+    """Handle audio with streamed per-sentence MP3 response.
+
+    Wire protocol:
+      → inbound:  {"type": "audio_streaming", "audio": "<b64 mp3/webm>"}
+      ← outbound (in order):
+          {"type": "audio_stream_start", "transcription": str,
+           "detected_language": str, "stt_latency": float}
+          {"type": "audio_delta", "seq": int, "audio": "<b64>",
+           "sentence": str}   # one per sentence, repeated
+          {"type": "audio_stream_end", "response_text": str,
+           "audio_file_path": str, "pipeline_latency": float,
+           "cached": bool, "source": str, "sentences": int}
+          {"type": "error", "message": str}   # if any stage fails
+    """
+    audio_data = await _decode_audio_blob(session_id, message.get("audio"))
+    if audio_data is None:
+        return
+
+    try:
+        await _stream_voice_response(session_id, audio_data)
+    except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+        logger.error(f"Streaming audio handler failed for {session_id}: {e}")
+        await manager.send_message(
+            session_id,
+            {
+                "type": WSMessageType.ERROR,
+                "message": f"Streaming audio failed: {e}",
+            },
+        )
+
+
+async def _stream_voice_response(session_id: str, audio_data: bytes):
+    """Drive the streaming voice pipeline and emit per-event WS messages."""
+    async for evt in voice_pipeline.process_voice_input_streaming(
+        audio_data, session_id
+    ):
+        evt_type = evt.get("type")
+        if evt_type == "transcription":
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.AUDIO_STREAM_START,
+                    "transcription": evt["text"],
+                    "detected_language": evt.get("detected_language", "en"),
+                    "stt_latency": evt.get("stt_latency", 0.0),
+                },
+            )
+        elif evt_type == "audio_delta":
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.AUDIO_DELTA,
+                    "seq": evt["seq"],
+                    "audio": base64.b64encode(evt["audio"]).decode(),
+                    "sentence": evt.get("sentence", ""),
+                },
+            )
+        elif evt_type == "done":
+            await manager.send_message(
+                session_id,
+                {
+                    "type": WSMessageType.AUDIO_STREAM_END,
+                    "response_text": evt.get("response_text", ""),
+                    "audio_file_path": evt.get("audio_file_path", ""),
+                    "pipeline_latency": evt.get("pipeline_latency", 0.0),
+                    "stt_latency": evt.get("stt_latency", 0.0),
+                    "rag_latency": evt.get("rag_latency", 0.0),
+                    "cached": evt.get("cached", False),
+                    "similarity_score": evt.get("similarity_score", 0.0),
+                    "source": evt.get("source", ""),
+                    "sentences": evt.get("sentences", 0),
+                },
+            )
+        elif evt_type == "error":
+            await manager.send_message(
+                session_id,
+                {"type": WSMessageType.ERROR, "message": evt.get("error", "")},
+            )
+            return
+        else:
+            logger.warning(
+                "Unknown pipeline event type for session %s: %r",
+                session_id,
+                evt_type,
+            )
 
 
 async def handle_audio_chunk_message(session_id: str, message: Dict[str, Any]):
@@ -1008,7 +1136,7 @@ async def handle_streaming_buffer(session_id: str, message: Dict[str, Any]):
         if not audio_b64:
             await manager.send_message(
                 session_id,
-                {"type": WSMessageType.ERROR, "message": "No audio data provided"},
+                {"type": WSMessageType.ERROR, "message": _NO_AUDIO_DATA_MSG},
             )
             return
 

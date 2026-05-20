@@ -31,6 +31,19 @@ WHISPER_ERRORS = (
 )
 OPENAI_STT_ERRORS = (STTError, AudioProcessingError, openai.OpenAIError, AttributeError)
 
+# Domain-vocabulary bias for Whisper. Prevents proper-noun mangling
+# (e.g. "LangGraph" → "Land Graph") that breaks downstream RAG retrieval.
+# Both faster-whisper (initial_prompt) and OpenAI Whisper (prompt) accept
+# a free-text hint; ≤224 tokens.
+STT_VOCAB_PROMPT = (
+    "Ateet Bahamani, EchoAI, MASX, MASX-Hotspots, MASX-GeoSignal, "
+    "MASX-Forecasting, Galileo, AgenticMatch, ApplyBots, MedAI, ShotGraph, "
+    "Nexora, LangChain, LangGraph, AutoGen, CrewAI, LlamaIndex, "
+    "Hugging Face, Transformers, Pydantic, FastAPI, RAG, FAISS, ChromaDB, "
+    "pgvector, Supabase, Whisper, GDELT, IHS Markit, Pitney Bowes, "
+    "Masterschool, MCP, A2A."
+)
+
 
 class STTService:
     """Speech-to-text service with streaming support."""
@@ -131,7 +144,13 @@ class STTService:
                 raise STTError("Faster-Whisper model not loaded")
             processed_audio = await self._processed_wav(audio_data)
             waveform = self._decode_wav_pcm16(processed_audio)
-            segments, info = self.fw_model.transcribe(waveform, beam_size=5)
+            segments, info = self.fw_model.transcribe(
+                waveform,
+                beam_size=5,
+                initial_prompt=STT_VOCAB_PROMPT,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 500},
+            )
             return self._whisper_result(segments, info, start_time)
         except WHISPER_ERRORS as exc:
             self._raise_stt_error("_transcribe_with_whisper", start_time, exc)
@@ -190,6 +209,7 @@ class STTService:
             model=self.fallback_stt_model,
             file=file_obj,
             response_format="json",
+            prompt=STT_VOCAB_PROMPT,
             timeout=settings.STT_TIMEOUT,
         )
 

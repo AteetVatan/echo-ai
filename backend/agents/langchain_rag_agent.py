@@ -456,7 +456,7 @@ CONTEXT:
             history = self.session_histories[session_id][-self.MAX_HISTORY_TURNS :]
         return "\n".join(f"User: {u}\nAteet: {a}" for u, a in history)
 
-    async def _store_exchange(
+    async def store_exchange(
         self, session_id: str, user_text: str, response_text: str
     ):
         """Store a conversation exchange. Called at every success return."""
@@ -477,7 +477,7 @@ CONTEXT:
         async with self._history_lock:
             self.session_histories.pop(session_id, None)
 
-    def _is_contextual_query(self, text: str, session_id: str = None) -> bool:
+    def is_contextual_query(self, text: str, session_id: str = None) -> bool:
         """Detect queries that depend on conversation context (anaphora)."""
         # FIX R9: Only flag as contextual if there IS prior history to reference
         # T4: Safe without lock — sync method with no yield points in CPython asyncio
@@ -530,7 +530,7 @@ CONTEXT:
         reply_language = LANGUAGE_NAMES.get(language, "English")
         try:
             start_time = time.time()
-            is_contextual = self._is_contextual_query(user_text, session_id)
+            is_contextual = self.is_contextual_query(user_text, session_id)
 
             # Step 1: Check reply cache (skip for context-dependent follow-ups)
             if not is_contextual:
@@ -547,7 +547,7 @@ CONTEXT:
                     f"Found cached reply with similarity {cached_reply.similarity_score:.3f}"
                 )
                 clean_reply = _strip_markdown(cached_reply.response_text)
-                await self._store_exchange(session_id, user_text, clean_reply)
+                await self.store_exchange(session_id, user_text, clean_reply)
                 return {
                     "response_text": clean_reply,
                     "audio_file_path": cached_reply.audio_file_path,
@@ -585,8 +585,13 @@ CONTEXT:
                         expand_input, llm=self.primary_llm, language=language
                     )
 
-                    # Manual retrieval + prompt (replacing RetrievalQA chain)
-                    docs = self.merged_retriever.invoke(retrieval_query)
+                    # Manual retrieval + prompt (replacing RetrievalQA chain).
+                    # Both .invoke calls are synchronous LangChain APIs that do
+                    # network I/O — run them off the event loop so concurrent
+                    # WebSocket sessions aren't blocked.
+                    docs = await asyncio.to_thread(
+                        self.merged_retriever.invoke, retrieval_query
+                    )
                     context_str = "\n\n".join(doc.page_content for doc in docs)
                     history_str = await self._get_history_str(session_id)
 
@@ -597,7 +602,9 @@ CONTEXT:
                         reply_language=reply_language,
                         question=user_text,  # ORIGINAL query, not expanded
                     )
-                    llm_response = self.primary_llm.invoke(messages)
+                    llm_response = await asyncio.to_thread(
+                        self.primary_llm.invoke, messages
+                    )
                     response_text = _strip_markdown(
                         llm_response.content
                         if hasattr(llm_response, "content")
@@ -613,7 +620,7 @@ CONTEXT:
 
                     source_docs = docs
 
-                    await self._store_exchange(session_id, user_text, response_text)
+                    await self.store_exchange(session_id, user_text, response_text)
                     return {
                         "response_text": response_text,
                         "cached": False,
@@ -639,7 +646,7 @@ CONTEXT:
                         use_fallback=True,
                         language=language,
                     )
-                    await self._store_exchange(session_id, user_text, response)
+                    await self.store_exchange(session_id, user_text, response)
                     return {
                         "response_text": response,
                         "cached": False,
@@ -656,7 +663,7 @@ CONTEXT:
                 response = await self._direct_llm_response(
                     user_text, session_id=session_id, language=language
                 )
-                await self._store_exchange(session_id, user_text, response)
+                await self.store_exchange(session_id, user_text, response)
                 return {
                     "response_text": response,
                     "cached": False,
@@ -682,7 +689,7 @@ CONTEXT:
                     use_fallback=True,
                     language=language,
                 )
-                await self._store_exchange(session_id, user_text, response)
+                await self.store_exchange(session_id, user_text, response)
                 return {
                     "response_text": response,
                     "cached": False,
@@ -706,6 +713,133 @@ CONTEXT:
                     "fallback_error": str(fallback_error),
                     "processing_time": time.time() - start_time,
                 }
+
+    async def process_query_streaming(
+        self,
+        user_text: str,
+        session_id: str = None,
+        language: str = "en",
+    ):
+        """Stream LLM tokens for the RAG self-info path.
+
+        Yields raw token chunks (str) as DeepSeek emits them, then a final
+        sentinel dict with the assembled response and metadata:
+            {"_done": True, "response_text": str, "source": str, ...}
+
+        Cache hits, direct-LLM fallbacks, and error paths are NOT streamed —
+        callers should run the cache check first via the non-streaming
+        `process_query` and only fall back to this for the live RAG path.
+        Markdown stripping happens once on the assembled text at the end,
+        because the regex isn't chunk-safe.
+        """
+        reply_language = LANGUAGE_NAMES.get(language, "English")
+        start_time = time.time()
+
+        if not (
+            self.self_info_knowledge_base
+            and getattr(self, "merged_retriever", None)
+        ):
+            # No knowledge base — fall back to non-streaming direct LLM,
+            # then emit it as a single chunk so the caller's contract holds.
+            response = await self._direct_llm_response(
+                user_text, session_id=session_id, language=language
+            )
+            await self.store_exchange(session_id, user_text, response)
+            yield response
+            yield {
+                "_done": True,
+                "response_text": response,
+                "source": "llm_direct",
+                "knowledge_used": False,
+                "processing_time": time.time() - start_time,
+            }
+            return
+
+        is_contextual = self.is_contextual_query(user_text, session_id)
+        from backend.agents.query_expansions import expand_query
+
+        expand_input = user_text
+        if is_contextual and session_id and session_id in self.session_histories:
+            async with self._history_lock:
+                last = self.session_histories[session_id][-1]
+            expand_input = (
+                f"Previous: {last[0]} → {last[1][:100]}... | Current: {user_text}"
+            )
+        retrieval_query = await expand_query(
+            expand_input, llm=self.primary_llm, language=language
+        )
+
+        docs = await asyncio.to_thread(self.merged_retriever.invoke, retrieval_query)
+        context_str = "\n\n".join(doc.page_content for doc in docs)
+        history_str = await self._get_history_str(session_id)
+
+        messages = self.rag_prompt.format_messages(
+            context=context_str,
+            chat_history=history_str,
+            reply_language=reply_language,
+            question=user_text,
+        )
+
+        parts: list[str] = []
+        try:
+            async for chunk in self.primary_llm.astream(messages):
+                piece = (
+                    chunk.content if hasattr(chunk, "content") else str(chunk)
+                )
+                if not piece:
+                    continue
+                parts.append(piece)
+                yield piece
+        except (
+            DatabaseError,
+            RAGError,
+            RuntimeError,
+            ValueError,
+            KeyError,
+            TypeError,
+        ) as rag_error:
+            logger.error("Streaming RAG failed, falling back: %s", rag_error)
+            response = await self._direct_llm_response(
+                user_text,
+                session_id=session_id,
+                use_fallback=True,
+                language=language,
+            )
+            await self.store_exchange(session_id, user_text, response)
+            yield response
+            yield {
+                "_done": True,
+                "response_text": response,
+                "source": "llm_fallback",
+                "knowledge_used": False,
+                "rag_error": str(rag_error),
+                "processing_time": time.time() - start_time,
+            }
+            return
+
+        raw_text = "".join(parts)
+        response_text = _strip_markdown(raw_text)
+
+        # Output guard: leaked system prompt → reset (matches process_query).
+        if "SECURITY_MARKER_7f3a9c" in response_text:
+            logger.warning(
+                f"Streaming output guard triggered for session {session_id}"
+            )
+            response_text = (
+                "I'm not sure how to answer that. Feel free to ask me about my "
+                "work experience, projects, or skills!"
+            )
+
+        await self.store_exchange(session_id, user_text, response_text)
+        yield {
+            "_done": True,
+            "response_text": response_text,
+            "raw_text": raw_text,
+            "source": "rag_self_info",
+            "knowledge_used": True,
+            "source_documents": len(docs),
+            "processing_time": time.time() - start_time,
+        }
 
     async def _direct_llm_response(
         self,
@@ -755,7 +889,9 @@ CONTEXT:
                     history_messages.append(AIMessage(content=a))
 
             human_msg = HumanMessage(content=user_text)
-            response = llm_to_use.invoke([system_msg] + history_messages + [human_msg])
+            response = await asyncio.to_thread(
+                llm_to_use.invoke, [system_msg] + history_messages + [human_msg]
+            )
 
             # Extract content from response and strip markdown
             if hasattr(response, "content"):

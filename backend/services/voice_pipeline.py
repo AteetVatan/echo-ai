@@ -24,6 +24,7 @@ from backend.constants import (
     PipelineSource,
     LATENCY_WINDOW_SIZE,
     STREAM_PROCESSING_BATCH_SIZE,
+    REPLY_CACHE_SIMILARITY_THRESHOLD,
 )
 from backend.exceptions import EchoAIError
 
@@ -111,6 +112,10 @@ class VoicePipeline:
         # Initialize RAG agent (lazy — deferred until first access)
         self._rag_agent = None
 
+        # Strong-ref set for fire-and-forget persistence tasks so the
+        # event loop doesn't garbage-collect them mid-flight.
+        self._background_tasks: set[asyncio.Task] = set()
+
     @property
     def rag_agent(self):
         """Lazy accessor — initialises the RAG agent on first use."""
@@ -136,6 +141,47 @@ class VoicePipeline:
         except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
             logger.error("Failed to load cached audio %s: %s", audio_storage_path, e)
             return None
+
+    def _persist_response_async(
+        self,
+        audio_file_path: str,
+        audio_data: bytes,
+        user_text: str,
+        response_text: str,
+    ) -> None:
+        """Schedule post-response persistence as a background task.
+
+        Used to move Supabase upload + cache-row insert off the request
+        path so the user gets audio bytes back without waiting on
+        storage I/O.
+        """
+        task = asyncio.create_task(
+            self._persist_response(
+                audio_file_path, audio_data, user_text, response_text
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _persist_response(
+        self,
+        audio_file_path: str,
+        audio_data: bytes,
+        user_text: str,
+        response_text: str,
+    ) -> None:
+        """Upload audio then store the semantic-cache row. Best-effort."""
+        try:
+            await tts_service.db.upload_audio_bytes(audio_file_path, audio_data)
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Background audio upload failed: %s", e)
+
+        try:
+            await self.rag_agent.store_interaction(
+                user_text, response_text, audio_file_path
+            )
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Background cache write failed: %s", e)
 
     @log_performance
     async def process_voice_input(
@@ -262,21 +308,7 @@ class VoicePipeline:
 
                 result.audio_data = tts_result["audio_data"]
                 result.cached = tts_result.get("cached", False)
-
-                # Generate storage path and save to Supabase
                 result.audio_file_path = self._generate_audio_storage_path(session_id)
-                try:
-                    await tts_service.db.upload_audio_bytes(
-                        result.audio_file_path, result.audio_data
-                    )
-                except (
-                    EchoAIError,
-                    RuntimeError,
-                    ValueError,
-                    KeyError,
-                    TypeError,
-                ) as e:
-                    logger.warning("Failed to upload session audio: %s", e)
 
             except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
                 result.error = f"TTS processing failed: {str(e)}"
@@ -285,13 +317,14 @@ class VoicePipeline:
                 self._update_stats(result.pipeline_latency, success=False)
                 return result
 
-            # Stage 4: Store interaction in cache for future semantic reuse
-            try:
-                await self.rag_agent.store_interaction(
-                    result.transcription, result.response_text, result.audio_file_path
-                )
-            except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
-                logger.warning(f"Failed to store interaction in cache: {str(e)}")
+            # Stage 4: Persist audio + cache row in the background so storage
+            # I/O doesn't add to user-visible latency.
+            self._persist_response_async(
+                result.audio_file_path,
+                result.audio_data,
+                result.transcription,
+                result.response_text,
+            )
 
             # Compile final results
             result.pipeline_latency = time.time() - pipeline_start
@@ -320,6 +353,304 @@ class VoicePipeline:
                 },
             )
             return result
+
+    # -----------------------------------------------------------------------
+    # Streaming variant: per-sentence MP3 frames
+    # -----------------------------------------------------------------------
+    # Sentence boundary = .!? followed by whitespace OR end-of-buffer at
+    # stream completion. Apostrophes in contractions ("don't") and decimals
+    # without trailing whitespace ("v1.0 release") do NOT trigger; "Dr. Smith"
+    # does (acceptable — TTS just speaks two utterances).
+    _SENTENCE_TERMINATORS = ".!?"
+
+    @classmethod
+    def _find_sentence_boundary(cls, text: str) -> int:
+        """Return the cut index AFTER the first sentence boundary, or -1.
+
+        A boundary is .!? followed by whitespace. End-of-buffer is handled
+        separately by the caller at stream completion.
+        """
+        for i, ch in enumerate(text):
+            if ch in cls._SENTENCE_TERMINATORS and i + 1 < len(text) and text[i + 1].isspace():
+                return i + 1
+        return -1
+
+    async def _synth_sentence_bytes(self, sentence: str) -> bytes:
+        """Synthesise one sentence to MP3 bytes. Best-effort; returns b'' on failure."""
+        try:
+            result = await tts_service.synthesize_speech(sentence)
+            if "error" in result:
+                logger.warning(
+                    "Streaming TTS failed for sentence (%d chars): %s",
+                    len(sentence),
+                    result["error"],
+                )
+                return b""
+            return result.get("audio_data", b"")
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            logger.warning("Streaming TTS exception: %s", exc)
+            return b""
+
+    async def _streaming_stt(
+        self, audio_data: bytes
+    ) -> Dict[str, Any]:
+        """Run STT and return {text, language, latency} or {error}."""
+        stt_start = time.time()
+        try:
+            processed_audio = await audio_processor.process_audio_for_stt(audio_data)
+            stt_result = await stt_service.transcribe_audio(processed_audio)
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            return {"error": f"STT processing failed: {exc}"}
+
+        latency = time.time() - stt_start
+        if "error" in stt_result:
+            return {"error": stt_result["error"]}
+
+        transcription = stt_result.get("text", "")
+        if not transcription.strip():
+            return {"error": "No speech detected"}
+
+        return {
+            "text": transcription,
+            "language": stt_result.get("detected_language", "en"),
+            "latency": latency,
+        }
+
+    async def _try_streaming_cache_hit(
+        self, transcription: str, session_id: str
+    ):
+        """If the reply cache has a near-match with audio, return (audio, reply); else None."""
+        try:
+            if self.rag_agent.is_contextual_query(transcription, session_id):
+                return None
+            cached_reply = await self.rag_agent.reply_cache.find_similar_reply(
+                transcription
+            )
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            logger.warning("Reply cache lookup failed: %s", exc)
+            return None
+
+        if not (
+            cached_reply
+            and cached_reply.similarity_score >= REPLY_CACHE_SIMILARITY_THRESHOLD
+            and cached_reply.audio_file_path
+        ):
+            return None
+
+        cached_audio = await self._load_cached_audio(cached_reply.audio_file_path)
+        if not cached_audio:
+            return None
+        return cached_audio, cached_reply
+
+    async def _try_emit_next_sentence(
+        self, buffer: str, seq: int, accumulator: bytearray
+    ):
+        """Pop the next complete sentence (if any) from ``buffer`` and emit it.
+
+        Returns ``(remaining_buffer, next_seq, frame_or_None)``. ``frame`` is
+        None when there is no complete sentence yet (caller stops looping).
+        Empty whitespace-only fragments before the next real sentence are
+        skipped internally so the caller doesn't have to spin one outer
+        iteration per skipped fragment.
+        """
+        while True:
+            boundary = self._find_sentence_boundary(buffer)
+            if boundary <= 0:
+                return buffer, seq, None
+            sentence = buffer[:boundary].strip()
+            buffer = buffer[boundary:].lstrip()
+            if not sentence:
+                # Empty fragment — keep scanning the remaining buffer in this call.
+                continue
+            audio = await self._synth_sentence_bytes(sentence)
+            if not audio:
+                # Synth failed — drop this sentence and continue scanning.
+                continue
+            accumulator.extend(audio)
+            return (
+                buffer,
+                seq + 1,
+                {
+                    "type": "audio_delta",
+                    "audio": audio,
+                    "seq": seq,
+                    "sentence": sentence,
+                },
+            )
+
+    async def _pump_llm_to_audio_events(
+        self, transcription: str, session_id: str, language: str
+    ):
+        """Stream LLM tokens; yield audio_delta dicts then a final meta dict.
+
+        Final yield is ``{"_meta": {...}, "_accumulated": bytes,
+        "_sentence_count": int}``; the caller forwards audio_deltas to the
+        WS and uses meta + accumulated for persistence.
+        """
+        accumulated = bytearray()
+        buffer = ""
+        seq = 0
+        meta: Dict[str, Any] = {}
+
+        async for chunk in self.rag_agent.process_query_streaming(
+            transcription, session_id, language=language
+        ):
+            if isinstance(chunk, dict) and chunk.get("_done"):
+                meta = chunk
+                break
+            if not isinstance(chunk, str):
+                continue
+            buffer += chunk
+            while True:
+                buffer, seq, frame = await self._try_emit_next_sentence(
+                    buffer, seq, accumulated
+                )
+                if frame is None:
+                    break
+                yield frame
+
+        # Flush trailing fragment (no terminator + whitespace at end-of-stream).
+        tail = buffer.strip()
+        if tail:
+            audio = await self._synth_sentence_bytes(tail)
+            if audio:
+                accumulated.extend(audio)
+                yield {
+                    "type": "audio_delta",
+                    "audio": audio,
+                    "seq": seq,
+                    "sentence": tail,
+                }
+                seq += 1
+
+        yield {
+            "_meta": meta,
+            "_accumulated": bytes(accumulated),
+            "_sentence_count": seq,
+        }
+
+    async def process_voice_input_streaming(
+        self, audio_data: bytes, session_id: str = None
+    ):
+        """Streaming pipeline: yields per-sentence MP3 frames as the LLM generates.
+
+        Yields a sequence of dict events:
+          - {"type": "transcription", "text", "detected_language", "stt_latency"}
+          - {"type": "audio_delta", "audio": bytes, "seq": int, "sentence": str}
+          - {"type": "done", "response_text", "audio_file_path", "pipeline_latency",
+              "stt_latency", "cached": bool, "source": str, "similarity_score": float?}
+          - {"type": "error", "error": str}
+        """
+        pipeline_start = time.time()
+        self.current_session_id = session_id
+        self.conversation_active = True
+        self.performance_stats["total_requests"] += 1
+
+        stt = await self._streaming_stt(audio_data)
+        if "error" in stt:
+            self._update_stats(time.time() - pipeline_start, success=False)
+            yield {"type": "error", "error": stt["error"]}
+            return
+
+        transcription = stt["text"]
+        detected_language = stt["language"]
+        stt_latency = stt["latency"]
+        yield {
+            "type": "transcription",
+            "text": transcription,
+            "detected_language": detected_language,
+            "stt_latency": stt_latency,
+        }
+
+        cache_hit = await self._try_streaming_cache_hit(transcription, session_id)
+        if cache_hit is not None:
+            cached_audio, cached_reply = cache_hit
+            await self.rag_agent.store_exchange(
+                session_id, transcription, cached_reply.response_text
+            )
+            self.performance_stats["cache_hits"] += 1
+            pipeline_latency = time.time() - pipeline_start
+            self._update_stats(pipeline_latency, success=True)
+            yield {
+                "type": "audio_delta",
+                "audio": cached_audio,
+                "seq": 0,
+                "sentence": cached_reply.response_text,
+            }
+            yield {
+                "type": "done",
+                "response_text": cached_reply.response_text,
+                "audio_file_path": cached_reply.audio_file_path,
+                "pipeline_latency": pipeline_latency,
+                "stt_latency": stt_latency,
+                "cached": True,
+                "similarity_score": cached_reply.similarity_score,
+                "source": PipelineSource.CACHE,
+            }
+            return
+
+        rag_start = time.time()
+        accumulated_audio = b""
+        response_meta: Dict[str, Any] = {}
+        sentence_count = 0
+        try:
+            async for evt in self._pump_llm_to_audio_events(
+                transcription, session_id, detected_language
+            ):
+                if "_meta" in evt:
+                    response_meta = evt["_meta"]
+                    accumulated_audio = evt["_accumulated"]
+                    sentence_count = evt["_sentence_count"]
+                else:
+                    yield evt
+        except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as exc:
+            pipeline_latency = time.time() - pipeline_start
+            self._update_stats(pipeline_latency, success=False)
+            log_error_with_context(
+                logger,
+                exc,
+                {
+                    "session_id": session_id,
+                    "audio_size": len(audio_data),
+                    "pipeline_stage": "streaming_llm_tts",
+                },
+            )
+            yield {"type": "error", "error": f"Streaming pipeline failed: {exc}"}
+            return
+
+        response_text = response_meta.get("response_text", "")
+        source = response_meta.get("source", PipelineSource.PIPELINE)
+        if source == PipelineSource.RAG_SELF_INFO:
+            self.performance_stats["rag_queries"] += 1
+
+        audio_file_path = ""
+        if accumulated_audio and response_text:
+            audio_file_path = self._generate_audio_storage_path(session_id)
+            self._persist_response_async(
+                audio_file_path, accumulated_audio, transcription, response_text
+            )
+
+        pipeline_latency = time.time() - pipeline_start
+        rag_latency = time.time() - rag_start
+        self._update_stats(pipeline_latency, success=True)
+        logger.info(
+            "Streaming voice pipeline completed: %d sentences, %.3fs (stt=%.3fs, rag+tts=%.3fs)",
+            sentence_count,
+            pipeline_latency,
+            stt_latency,
+            rag_latency,
+        )
+        yield {
+            "type": "done",
+            "response_text": response_text,
+            "audio_file_path": audio_file_path,
+            "pipeline_latency": pipeline_latency,
+            "stt_latency": stt_latency,
+            "rag_latency": rag_latency,
+            "cached": False,
+            "source": source,
+            "sentences": sentence_count,
+        }
 
     async def process_streaming_voice(
         self, audio_chunks: List[bytes], session_id: str = None
@@ -440,21 +771,7 @@ class VoicePipeline:
 
                 result.audio_data = tts_result["audio_data"]
                 result.cached = tts_result.get("cached", False)
-
-                # Generate storage path and save to Supabase
                 result.audio_file_path = self._generate_audio_storage_path(session_id)
-                try:
-                    await tts_service.db.upload_audio_bytes(
-                        result.audio_file_path, result.audio_data
-                    )
-                except (
-                    EchoAIError,
-                    RuntimeError,
-                    ValueError,
-                    KeyError,
-                    TypeError,
-                ) as e:
-                    logger.warning("Failed to upload session audio: %s", e)
 
             except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
                 result.error = f"TTS processing failed: {str(e)}"
@@ -463,15 +780,13 @@ class VoicePipeline:
                 self._update_stats(result.pipeline_latency, success=False)
                 return result
 
-            # Stage 4: Store interaction in cache for future semantic reuse
-            try:
-                await self.rag_agent.store_interaction(
-                    result.transcription, result.response_text, result.audio_file_path
-                )
-            except (EchoAIError, RuntimeError, ValueError, KeyError, TypeError) as e:
-                logger.warning(
-                    f"Failed to store streaming interaction in cache: {str(e)}"
-                )
+            # Stage 4: Persist audio + cache row in the background.
+            self._persist_response_async(
+                result.audio_file_path,
+                result.audio_data,
+                result.transcription,
+                result.response_text,
+            )
 
             # Finalize results
             result.pipeline_latency = time.time() - pipeline_start
@@ -656,23 +971,9 @@ class VoicePipeline:
 
                     result.audio_data = tts_result["audio_data"]
                     result.cached = tts_result.get("cached", False)
-
-                    # Generate storage path and save to Supabase
                     result.audio_file_path = self._generate_audio_storage_path(
                         session_id
                     )
-                    try:
-                        await tts_service.db.upload_audio_bytes(
-                            result.audio_file_path, result.audio_data
-                        )
-                    except (
-                        EchoAIError,
-                        RuntimeError,
-                        ValueError,
-                        KeyError,
-                        TypeError,
-                    ) as e:
-                        logger.warning("Failed to upload session audio: %s", e)
 
                 except (
                     EchoAIError,
@@ -687,21 +988,13 @@ class VoicePipeline:
                     self._update_stats(result.pipeline_latency, success=False)
                     return result
 
-                # Stage 3: Store interaction in cache for future semantic reuse
-                try:
-                    await self.rag_agent.store_interaction(
-                        text, result.response_text, result.audio_file_path
-                    )
-                except (
-                    EchoAIError,
-                    RuntimeError,
-                    ValueError,
-                    KeyError,
-                    TypeError,
-                ) as e:
-                    logger.warning(
-                        f"Failed to store text interaction in cache: {str(e)}"
-                    )
+                # Stage 3: Persist audio + cache row in the background.
+                self._persist_response_async(
+                    result.audio_file_path,
+                    result.audio_data,
+                    text,
+                    result.response_text,
+                )
 
             # Finalize results
             result.pipeline_latency = time.time() - pipeline_start

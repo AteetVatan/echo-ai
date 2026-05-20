@@ -10,6 +10,7 @@ Strategy:
 Kept in its own file for easy maintenance.
 """
 
+import asyncio
 import re
 from typing import List, Tuple, Optional
 from re import Pattern
@@ -96,11 +97,19 @@ QUERY_EXPANSIONS: List[QueryExpansionRule] = [
         "What Python frameworks and tools does Ateet use?",
     ),
     (
-        re.compile(r"\b(langchain|langgraph|llm\s*framework)\b", re.I),
+        # STT often mangles "LangGraph" → "land graph" / "lang graph" / "line graph"
+        # and "LangChain" → "lang chain" / "long chain". Accept the splits.
+        re.compile(
+            r"\b(lang\s*chain|long\s*chain|lang\s*graph|land\s*graph|line\s*graph|llm\s*framework)\b",
+            re.I,
+        ),
         "What AI and LLM frameworks does Ateet use, including LangChain?",
     ),
     (
-        re.compile(r"\b(autogen|crewai|multi.?agent)\b", re.I),
+        # "AutoGen" → "auto gen" / "otto gen"; "CrewAI" → "crew ai" / "crew eye".
+        re.compile(
+            r"\b(auto\s*gen|otto\s*gen|crew\s*ai|crew\s*eye|multi.?agent)\b", re.I
+        ),
         "What multi-agent frameworks does Ateet use, such as AutoGen and CrewAI?",
     ),
     (
@@ -395,11 +404,14 @@ async def translate_to_english(user_text: str, llm) -> str:
     try:
         from langchain_core.messages import SystemMessage, HumanMessage
 
-        response = llm.invoke(
+        # Run the synchronous LangChain call off the event loop so it
+        # doesn't stall concurrent voice sessions during translation.
+        response = await asyncio.to_thread(
+            llm.invoke,
             [
                 SystemMessage(content=_TRANSLATE_ONLY_PROMPT),
                 HumanMessage(content=user_text),
-            ]
+            ],
         )
 
         result = (
@@ -432,11 +444,13 @@ async def expand_query_llm(user_text: str, llm) -> str:
     try:
         from langchain_core.messages import SystemMessage, HumanMessage
 
-        response = llm.invoke(
+        # Off the event loop — see translate_to_english for rationale.
+        response = await asyncio.to_thread(
+            llm.invoke,
             [
                 SystemMessage(content=_REWRITE_SYSTEM_PROMPT),
                 HumanMessage(content=user_text),
-            ]
+            ],
         )
 
         rewritten = (
