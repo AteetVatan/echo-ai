@@ -365,27 +365,37 @@ async def clear_conversation():
 WS_TOKEN_MAX_AGE_SECONDS = 300  # 5-minute expiry
 
 
-def _verify_ws_token(token: str, secret: str) -> bool:
+def _verify_ws_token(token: str, secret: str) -> tuple[bool, str]:
     """Verify an HMAC-signed session token.
 
     Token format: "<unix_timestamp>.<hmac_sha256_hex>"
     The Next.js API route at /api/auth/ws-token generates these.
+
+    Returns (ok, reason). reason is a short tag for diagnostic logging;
+    it never includes the secret or the raw token.
     """
+    if not token:
+        return False, "empty_token"
     parts = token.split(".", 1)
     if len(parts) != 2:
-        return False
+        return False, "bad_format"
     timestamp_str, received_hmac = parts
     try:
         timestamp = int(timestamp_str)
     except (ValueError, TypeError):
-        return False
-    # Reject tokens older than 5 minutes
-    if abs(time.time() - timestamp) > WS_TOKEN_MAX_AGE_SECONDS:
-        return False
+        return False, "bad_timestamp"
+    skew = time.time() - timestamp
+    if abs(skew) > WS_TOKEN_MAX_AGE_SECONDS:
+        return False, f"stale_timestamp(skew={skew:.0f}s)"
     expected = hmac.new(
         secret.encode(), timestamp_str.encode(), hashlib.sha256
     ).hexdigest()
-    return hmac.compare_digest(expected, received_hmac)
+    if not hmac.compare_digest(expected, received_hmac):
+        return (
+            False,
+            f"hmac_mismatch(secret_len={len(secret)},hmac_len={len(received_hmac)})",
+        )
+    return True, "ok"
 
 
 @app.websocket("/ws/voice")
@@ -445,10 +455,18 @@ async def _authenticate_websocket(websocket: WebSocket, session_id: str) -> bool
         auth_msg = json.loads(auth_raw)
         token = auth_msg.get("token", "") if isinstance(auth_msg, dict) else ""
         msg_type = auth_msg.get("type") if isinstance(auth_msg, dict) else None
-        if msg_type == "auth" and _verify_ws_token(token, settings.ECHOAI_API_KEY):
+        if msg_type != "auth":
+            logger.warning(
+                f"WS auth rejected for {session_id}: missing/invalid 'type' field"
+            )
+            ok, reason = False, "wrong_message_type"
+        else:
+            ok, reason = _verify_ws_token(token, settings.ECHOAI_API_KEY)
+        if ok:
             await websocket.send_text(json.dumps({"type": "auth_success"}))
             return True
 
+        logger.warning(f"WS auth rejected for {session_id}: {reason}")
         with contextlib.suppress(RuntimeError, WebSocketDisconnect):
             await websocket.send_text(
                 json.dumps(
